@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ddor-navy: #0E2235;
+  --ddor-blue: #1A73A8;
+  --ddor-teal: #2BA5B5;
+  --ddor-light: #F0F7FA;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
