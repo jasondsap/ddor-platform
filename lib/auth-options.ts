@@ -1,6 +1,6 @@
 import type { NextAuthOptions } from 'next-auth';
 import CognitoProvider from 'next-auth/providers/cognito';
-import { getOrCreateUser, getUserFacilities, sql } from '@/lib/db';
+import { getOrCreateUser, sql } from '@/lib/db';
 
 export const authOptions: NextAuthOptions = {
     providers: [
@@ -66,14 +66,14 @@ export const authOptions: NextAuthOptions = {
                             LEFT JOIN facilities f ON u.facility_id = f.id
                             LEFT JOIN providers p ON f.provider_id = p.id
                             WHERE u.cognito_sub = ${token.sub as string}
-                        `;
+                        ` as any[];
                     } catch {
                         // Fallback: just get user row (tables may not have data yet)
                         userInfo = await sql`
                             SELECT id AS user_id, role, facility_id
                             FROM users
                             WHERE cognito_sub = ${token.sub as string}
-                        `;
+                        ` as any[];
                     }
 
                     if (userInfo.length > 0) {
