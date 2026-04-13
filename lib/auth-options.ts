@@ -1,9 +1,6 @@
 import type { NextAuthOptions } from 'next-auth';
 import CognitoProvider from 'next-auth/providers/cognito';
-import { getOrCreateUser, getUserFacilities } from '@/lib/db';
-import { neon } from '@neondatabase/serverless';
-
-const sql = neon(process.env.DATABASE_URL!);
+import { getOrCreateUser, getUserFacilities, sql } from '@/lib/db';
 
 export const authOptions: NextAuthOptions = {
     providers: [
