@@ -59,7 +59,7 @@ export async function requireFacilityAccess(facilityId: string): Promise<DDORSes
             JOIN user_counties uc ON fsc.county_id = uc.county_id
             WHERE f.id = ${facilityId} AND uc.user_id = ${userId}::uuid
             LIMIT 1
-        `;
+        ` as any[];
         if (result.length > 0) return session;
     }
 
@@ -73,7 +73,7 @@ export async function requireFacilityAccess(facilityId: string): Promise<DDORSes
         SELECT 1 FROM user_facilities
         WHERE user_id = ${userId}::uuid AND facility_id = ${facilityId}::uuid
         LIMIT 1
-    `;
+    ` as any[];
     if (additional.length > 0) return session;
 
     throw new Error('Facility access denied');
@@ -92,7 +92,7 @@ export async function requireClientAccess(clientId: string): Promise<DDORSession
     }
 
     // Get client's facility, then check facility access
-    const client = await sql`SELECT facility_id FROM clients WHERE id = ${clientId}::uuid`;
+    const client = await sql`SELECT facility_id FROM clients WHERE id = ${clientId}::uuid` as any[];
     if (client.length === 0) throw new Error('Client not found');
 
     return requireFacilityAccess(client[0].facility_id);
