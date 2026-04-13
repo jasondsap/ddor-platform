@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import {
     Search, Building, Users, FileText, ChevronRight,
-    Loader2, X, MapPin
+    Loader2, X, MapPin, Plus
 } from 'lucide-react';
 
 export default function ProvidersPage() {
@@ -53,6 +53,12 @@ export default function ProvidersPage() {
                             {providers.length} providers • {totalFacilities} facilities • {totalClients} active clients
                         </p>
                     </div>
+                    {(ddor?.role === 'super_admin' || ddor?.role === 'business_user') && (
+                        <button onClick={() => router.push('/admin/providers/new')}
+                            className="flex items-center gap-2 px-4 py-2 bg-ddor-blue text-white rounded-lg font-medium hover:bg-[#156090] text-sm">
+                            <Plus className="w-4 h-4" /> New Provider
+                        </button>
+                    )}
                 </div>
 
                 <div className="relative mb-6">

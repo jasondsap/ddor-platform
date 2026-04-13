@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
-import { query } from '@/lib/db';
+import { requireAuth, isAdmin, getUserId } from '@/lib/auth';
+import { query, insert, logAuditEvent } from '@/lib/db';
 
 // GET /api/providers — list all providers with counts
 export async function GET(req: NextRequest) {
@@ -90,5 +90,37 @@ export async function GET(req: NextRequest) {
         if (error.message === 'Unauthorized') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         console.error('Error:', error);
         return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    }
+}
+
+// POST /api/providers — create a new provider (admin only)
+export async function POST(req: NextRequest) {
+    try {
+        const session = await requireAuth();
+        if (!isAdmin(session)) return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+
+        const body = await req.json();
+        if (!body.name?.trim()) return NextResponse.json({ error: 'Provider name is required' }, { status: 400 });
+
+        const provider = await insert('providers', {
+            name: body.name.trim(),
+            abbreviation: body.abbreviation?.trim() || null,
+            phone: body.phone || null,
+            email: body.email || null,
+            address_line1: body.address_line1 || null,
+            address_line2: body.address_line2 || null,
+            city: body.city || null,
+            state: body.state || 'KY',
+            zip: body.zip || null,
+            website: body.website || null,
+            notes: body.notes || null,
+        });
+
+        await logAuditEvent(getUserId(session), 'create', 'providers', (provider as any).id);
+        return NextResponse.json({ success: true, provider });
+    } catch (error: any) {
+        if (error.message === 'Unauthorized') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        console.error('Error creating provider:', error);
+        return NextResponse.json({ error: 'Failed to create provider' }, { status: 500 });
     }
 }

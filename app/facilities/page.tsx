@@ -77,6 +77,12 @@ export default function FacilitiesPage() {
                             {totalActive} active{showInactive ? `, ${totalInactive} inactive` : ''} • {filtered.length} shown
                         </p>
                     </div>
+                    {(ddor?.role === 'super_admin' || ddor?.role === 'business_user') && (
+                        <button onClick={() => router.push('/admin/facilities/new')}
+                            className="flex items-center gap-2 px-4 py-2 bg-ddor-blue text-white rounded-lg font-medium hover:bg-[#156090] text-sm">
+                            <Plus className="w-4 h-4" /> New Facility
+                        </button>
+                    )}
                 </div>
 
                 {/* Search & Filters */}

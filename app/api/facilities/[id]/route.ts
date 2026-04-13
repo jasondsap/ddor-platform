@@ -64,7 +64,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
         // Update scalar fields
         const allowedFields = ['name', 'phone', 'street_address', 'city', 'zip', 'region',
-            'facility_gender', 'is_inactive', 'primary_service', 'concerns', 'address'];
+            'facility_gender', 'is_inactive', 'primary_service', 'concerns', 'address', 'county_id', 'provider_id',
+            'onboard_ddor_training', 'onboard_ddor_poc', 'onboard_ddor_logins', 'onboard_kickoff_call',
+            'onboard_provider_training', 'onboard_next_steps_email', 'onboard_contract', 'onboard_baa',
+            'onboard_w9', 'onboard_ach', 'onboard_sent_executed_contract', 'onboard_monthly_checkins',
+            'onboard_reimbursement_training', 'onboard_complete', 'onboard_complete_kathy',
+            'onboard_complete_tanya', 'onboard_complete_jade'];
         const updates: string[] = [];
         const values: any[] = [];
         let idx = 1;

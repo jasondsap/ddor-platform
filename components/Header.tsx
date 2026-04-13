@@ -32,6 +32,8 @@ const FORM_ITEMS = [
 const ADMIN_ITEMS = [
     { label: 'Providers', href: '/providers', icon: Building },
     { label: 'Facilities', href: '/facilities', icon: Settings },
+    { label: 'Users', href: '/admin/users', icon: Shield },
+    { label: 'Contracts', href: '/admin/contracts', icon: FileText },
 ];
 
 export default function Header() {

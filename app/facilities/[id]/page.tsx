@@ -7,7 +7,7 @@ import Header from '@/components/Header';
 import {
     ArrowLeft, Building, MapPin, Phone, Users, ChevronRight,
     Loader2, Edit, Save, X, CheckCircle2, Stethoscope,
-    Shield, Heart, AlertCircle, Globe
+    Shield, Heart, AlertCircle, Globe, ClipboardCheck
 } from 'lucide-react';
 import { STATUS_COLORS } from '@/types';
 import type { ReportCompletionStatus } from '@/types';
@@ -131,9 +131,15 @@ export default function FacilityDetailPage() {
                         <p className="text-sm text-gray-500">Facility from {facility.provider_name || 'Unknown Provider'}</p>
                     </div>
                     {isAdminUser && !editing && (
-                        <button onClick={startEditing} className="flex items-center gap-2 px-4 py-2 bg-ddor-blue text-white rounded-lg text-sm font-medium hover:bg-[#156090]">
-                            <Edit className="w-4 h-4" /> Edit
-                        </button>
+                        <div className="flex gap-2">
+                            <button onClick={() => router.push(`/admin/facilities/new?edit=${facilityId}`)}
+                                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                <ClipboardCheck className="w-4 h-4" /> Onboarding
+                            </button>
+                            <button onClick={startEditing} className="flex items-center gap-2 px-4 py-2 bg-ddor-blue text-white rounded-lg text-sm font-medium hover:bg-[#156090]">
+                                <Edit className="w-4 h-4" /> Edit Services
+                            </button>
+                        </div>
                     )}
                     {editing && (
                         <div className="flex gap-2">

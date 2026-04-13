@@ -7,7 +7,7 @@ import Header from '@/components/Header';
 import {
     ArrowLeft, Building, Users, FileText, ChevronRight, ChevronDown, ChevronUp,
     Loader2, MapPin, Phone, CheckCircle2, AlertTriangle, Clock,
-    X, Activity, Stethoscope, Shield
+    X, Activity, Stethoscope, Shield, Edit
 } from 'lucide-react';
 import { STATUS_COLORS, REPORT_TYPE_LABELS } from '@/types';
 import type { ReportCompletionStatus } from '@/types';
@@ -76,6 +76,12 @@ export default function ProviderDetailPage() {
                         <h1 className="text-2xl font-bold text-ddor-navy">{provider.name}</h1>
                         {provider.abbreviation && <p className="text-sm text-gray-500">{provider.abbreviation}</p>}
                     </div>
+                    {(ddor?.role === 'super_admin' || ddor?.role === 'business_user') && (
+                        <button onClick={() => router.push(`/admin/providers/new?edit=${params.id}`)}
+                            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            <Edit className="w-4 h-4" /> Edit Provider
+                        </button>
+                    )}
                 </div>
 
                 {/* Stats */}
