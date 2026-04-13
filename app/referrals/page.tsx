@@ -142,7 +142,7 @@ export default function ReferralsPage() {
                                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
                                             {badge.label}
                                         </span>
-                                        {ref.linked_client_id && <CheckCircle2 className="w-4 h-4 text-green-500" title="Linked to client" />}
+                                        {ref.linked_client_id && <span title="Linked to client"><CheckCircle2 className="w-4 h-4 text-green-500" /></span>}
                                         <ChevronRight className="w-4 h-4 text-gray-400" />
                                     </div>
                                 </div>
