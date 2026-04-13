@@ -10,6 +10,7 @@ import {
     Activity, Printer, AlertTriangle
 } from 'lucide-react';
 import { REPORT_TYPE_LABELS } from '@/types';
+import { generateReportPDF } from '@/lib/generateReportPDF';
 import type { ReportType } from '@/types';
 
 export default function ReportViewPage() {
@@ -64,9 +65,32 @@ export default function ReportViewPage() {
                         <h1 className="text-2xl font-bold text-ddor-navy">{typeLabel}</h1>
                         <p className="text-sm text-gray-500">{clientName} • {report.facility_name || '—'}</p>
                     </div>
-                    <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        <Printer className="w-4 h-4" /> Print
-                    </button>
+                    <div className="flex gap-2">
+                        <button onClick={() => generateReportPDF({
+                            reportType: report.report_type, reportTypeLabel: typeLabel,
+                            clientName, ddorId: report.ddor_id,
+                            clientDob: report.client_dob ? new Date(report.client_dob).toLocaleDateString() : undefined,
+                            diagnosis: report.diagnosis, facilityName: report.facility_name, providerName: report.provider_name,
+                            dateSubmitted: report.date_submitted ? new Date(report.date_submitted).toLocaleDateString() : undefined,
+                            submitterName: report.submitter_name, submitterCredential: report.submitter_credential,
+                            signatureDate: report.signature_date ? new Date(report.signature_date).toLocaleDateString() : undefined,
+                            isSigned: report.is_signed, sudLoc: report.current_sud_loc, mhLoc: report.current_mh_loc,
+                            programStatus: report.program_status, attendance: report.attendance_frequency,
+                            isReceivingMat: report.is_receiving_mat, householdIncome: report.household_income,
+                            dependents: report.dependents_count, wasDischarged: report.was_discharged,
+                            dischargeDate: report.discharge_date ? new Date(report.discharge_date).toLocaleDateString() : undefined,
+                            dischargeReason: report.discharge_reason, referredProvider: report.referred_provider_name,
+                            referredLoc: report.referred_loc, kyaeReferralStatus: report.kyae_referral_status,
+                            kyaeEducationStatus: report.kyae_education_status, kyaeEmploymentStatus: report.kyae_employment_status,
+                            barrierNotes: report.barrier_notes, recommendationNotes: report.recommendation_notes,
+                            notes: report.notes, attributes,
+                        })} className="flex items-center gap-2 px-4 py-2 bg-ddor-blue text-white rounded-lg text-sm font-medium hover:bg-[#156090]">
+                            <FileText className="w-4 h-4" /> Download PDF
+                        </button>
+                        <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            <Printer className="w-4 h-4" /> Print
+                        </button>
+                    </div>
                 </div>
 
                 {/* Report meta bar */}
