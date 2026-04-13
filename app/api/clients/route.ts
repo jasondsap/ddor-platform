@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
             'clients',
             (client as any).id,
             undefined,
-            { first_name, last_name, facility_id }
+            { first_name: body.first_name, last_name: body.last_name, facility_id: body.facility_id }
         );
 
         return NextResponse.json({ success: true, client });

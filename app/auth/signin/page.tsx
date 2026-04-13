@@ -39,7 +39,7 @@ function SignInContent() {
                         onClick={() => signIn('cognito', { callbackUrl: '/' })}
                         className="w-full flex items-center justify-center gap-3 py-3.5 px-4 bg-[#1A73A8] text-white rounded-xl font-semibold hover:bg-[#156090] transition-all shadow-sm hover:shadow-md"
                     >
-                        Sign In 
+                        Sign In with SSO
                         <ArrowRight className="w-4 h-4" />
                     </button>
 
