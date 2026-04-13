@@ -45,14 +45,14 @@ export default function ClientsPage() {
 
     // Extract unique providers and facilities for filter dropdowns
     const providers = useMemo(() => {
-        const names = [...new Set(clients.map(c => c.provider_name).filter(Boolean))].sort();
+        const names = Array.from(new Set(clients.map(c => c.provider_name).filter(Boolean))).sort();
         return names;
     }, [clients]);
 
     const facilities = useMemo(() => {
         let list = clients.map(c => ({ name: c.facility_name, provider: c.provider_name })).filter(f => f.name);
         if (providerFilter) list = list.filter(f => f.provider === providerFilter);
-        const names = [...new Set(list.map(f => f.name))].sort();
+        const names = Array.from(new Set(list.map(f => f.name))).sort();
         return names;
     }, [clients, providerFilter]);
 

@@ -57,7 +57,7 @@ export default function FacilitiesPage() {
         );
     });
 
-    const regions = [...new Set(facilities.map(f => f.region).filter(Boolean))].sort();
+    const regions = Array.from(new Set(facilities.map(f => f.region).filter(Boolean))).sort();
     const totalActive = facilities.filter(f => !f.is_inactive).length;
     const totalInactive = facilities.filter(f => f.is_inactive).length;
 
