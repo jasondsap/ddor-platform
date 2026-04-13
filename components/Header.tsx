@@ -7,7 +7,7 @@ import {
     LayoutDashboard, Users, FileText, ClipboardList,
     DollarSign, Settings, LogOut, Menu, X, Activity,
     UserPlus, ChevronDown, RefreshCw, GraduationCap,
-    Bell, UserCheck, Shield, Edit, Building
+    Bell, UserCheck, Shield, Edit, Building, BarChart2
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -16,6 +16,7 @@ const NAV_ITEMS = [
     { label: 'Referrals', href: '/referrals', icon: UserPlus },
     { label: 'Reports', href: '/report-tracking', icon: ClipboardList },
     { label: 'Assessments', href: '/assessments', icon: Activity },
+    { label: 'Analytics', href: '/analytics', icon: BarChart2 },
     { label: 'Invoices', href: '/invoices', icon: DollarSign },
 ];
 
