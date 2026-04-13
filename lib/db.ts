@@ -131,7 +131,7 @@ export async function logAuditEvent(
 export async function getOrCreateUser(cognitoSub: string, email: string, name?: string) {
     const existing = await sql`
         SELECT * FROM users WHERE cognito_sub = ${cognitoSub}
-    `;
+    ` as any[];
 
     if (existing.length > 0) {
         await sql`UPDATE users SET updated_at = NOW() WHERE cognito_sub = ${cognitoSub}`;
@@ -139,7 +139,7 @@ export async function getOrCreateUser(cognitoSub: string, email: string, name?: 
     }
 
     // Try by email (existing user getting Cognito linked)
-    const byEmail = await sql`SELECT * FROM users WHERE email = ${email}`;
+    const byEmail = await sql`SELECT * FROM users WHERE email = ${email}` as any[];
     if (byEmail.length > 0) {
         await sql`UPDATE users SET cognito_sub = ${cognitoSub}, updated_at = NOW() WHERE id = ${byEmail[0].id}`;
         return byEmail[0];
@@ -152,7 +152,7 @@ export async function getOrCreateUser(cognitoSub: string, email: string, name?: 
         INSERT INTO users (cognito_sub, email, first_name, last_name)
         VALUES (${cognitoSub}, ${email}, ${firstName || null}, ${lastName || null})
         RETURNING *
-    `;
+    ` as any[];
 
     return newUser[0];
 }
