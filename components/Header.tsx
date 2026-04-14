@@ -7,7 +7,7 @@ import {
     LayoutDashboard, Users, FileText, ClipboardList,
     DollarSign, Settings, LogOut, Menu, X, Activity,
     UserPlus, ChevronDown, RefreshCw, GraduationCap,
-    Bell, UserCheck, Shield, Edit, Building, BarChart2
+    Bell, UserCheck, Shield, Edit, Building, BarChart2, Heart
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -34,6 +34,7 @@ const ADMIN_ITEMS = [
     { label: 'Facilities', href: '/facilities', icon: Settings },
     { label: 'Users', href: '/admin/users', icon: Shield },
     { label: 'Contracts', href: '/admin/contracts', icon: FileText },
+    { label: 'Barrier Relief', href: '/admin/barrier-relief', icon: Heart },
 ];
 
 export default function Header() {

@@ -88,6 +88,21 @@ export default function AnalyticsPage() {
                     <p className="text-sm text-gray-500 mt-1">BHCDP/SB90 Program — Data Driven Outcomes</p>
                 </div>
 
+                {/* View switcher */}
+                <div className="flex gap-2 mb-6">
+                    <button className="px-3 py-1.5 text-xs font-medium bg-ddor-blue text-white rounded-full">
+                        Program-Wide
+                    </button>
+                    <button onClick={() => router.push('/analytics/provider')}
+                        className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-full text-gray-600 hover:bg-gray-50">
+                        By Provider
+                    </button>
+                    <button onClick={() => router.push('/analytics/county')}
+                        className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-full text-gray-600 hover:bg-gray-50">
+                        By County
+                    </button>
+                </div>
+
                 {/* KPI Cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
                     <KPICard icon={Users} label="Active Participants" value={safe(stats.active_clients)} color="#2563eb" />
