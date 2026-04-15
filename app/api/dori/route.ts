@@ -350,7 +350,7 @@ function buildContextPrompt(results: any[]): string {
         switch (r.type) {
             case 'client':
                 sections.push(`**Clients Found:**\n${r.data.map((c: any) =>
-                    `- ${c.first_name} ${c.last_name} (ID: ${c.ddor_id || 'N/A'}) — ${c.is_archived ? 'Archived' : 'Active'}, Diagnosis: ${c.diagnosis || 'unspecified'}, Facility: ${c.facility_name || 'N/A'}, Provider: ${c.provider_name || 'N/A'}, Tx Start: ${c.treatment_start_date || 'Not set'}, Insurance: ${c.insurance_status || 'N/A'}, OUD: ${c.has_oud ? 'Yes' : 'No'}`
+                    `- ${c.first_name} ${c.last_name} (ID: ${c.ddor_id || 'N/A'}) — ${c.is_archived ? 'Archived' : 'Active'}, DOB: ${c.date_of_birth ? new Date(c.date_of_birth).toLocaleDateString() : 'N/A'}, Diagnosis: ${c.diagnosis || 'unspecified'}, Facility: ${c.facility_name || 'N/A'}, Provider: ${c.provider_name || 'N/A'}, Tx Start: ${c.treatment_start_date ? new Date(c.treatment_start_date).toLocaleDateString() : 'Not set'}, Agreement: ${c.agreement_signed_date ? new Date(c.agreement_signed_date).toLocaleDateString() : 'N/A'}, Insurance: ${c.insurance_status || 'N/A'}`
                 ).join('\n')}`);
                 break;
 
