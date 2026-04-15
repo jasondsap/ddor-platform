@@ -15,6 +15,7 @@ const ROLES = [
     { value: 'navigator', label: 'Navigator', color: 'bg-blue-50 text-blue-700', desc: 'County-scoped — case navigators' },
     { value: 'administrative_provider', label: 'Admin Provider', color: 'bg-amber-50 text-amber-700', desc: 'Provider admin — manages their facilities' },
     { value: 'healthcare_user', label: 'Healthcare User', color: 'bg-green-50 text-green-700', desc: 'Standard — facility staff' },
+    { value: 'court_assessor', label: 'Court Assessor', color: 'bg-indigo-50 text-indigo-700', desc: 'Read-only — court/prosecutor lookup via /court' },
 ];
 
 const getRoleConfig = (role: string) => ROLES.find(r => r.value === role) || ROLES[4];
