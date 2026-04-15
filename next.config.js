@@ -20,6 +20,11 @@ const nextConfig = {
     COGNITO_ISSUER: process.env.COGNITO_ISSUER,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     EMAIL_FROM: process.env.EMAIL_FROM,
+    APP_AWS_ACCESS_KEY_ID: process.env.APP_AWS_ACCESS_KEY_ID,
+    APP_AWS_SECRET_ACCESS_KEY: process.env.APP_AWS_SECRET_ACCESS_KEY,
+    APP_AWS_REGION: process.env.APP_AWS_REGION,
+    S3_BUCKET: process.env.S3_BUCKET,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   },
 };
 
