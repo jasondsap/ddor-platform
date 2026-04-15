@@ -7,7 +7,8 @@ import Header from '@/components/Header';
 import {
     Users, AlertTriangle, Clock, FileText, TrendingUp,
     ChevronRight, Loader2, Activity, ClipboardList,
-    DollarSign, MapPin, ArrowRight, Bell
+    DollarSign, MapPin, ArrowRight, Bell, MessageSquare,
+    AtSign, Mail, Hash, User
 } from 'lucide-react';
 import type { ReportCompletionStatus } from '@/types';
 import { STATUS_COLORS } from '@/types';
@@ -28,6 +29,7 @@ export default function DashboardPage() {
 
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [notifications, setNotifications] = useState<any>(null);
 
     useEffect(() => {
         if (status === 'unauthenticated') router.push('/auth/signin');
@@ -64,6 +66,7 @@ export default function DashboardPage() {
         };
 
         fetchDashboard();
+        fetch('/api/notifications').then(r => r.json()).then(d => setNotifications(d)).catch(() => {});
     }, [ddor]);
 
     if (status === 'loading' || loading) {
@@ -225,6 +228,119 @@ export default function DashboardPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* Messages & Mentions */}
+                {notifications && (notifications.totalUnread > 0 || (notifications.mentions || []).length > 0 || (notifications.recentDMs || []).length > 0 || (notifications.recentChannel || []).length > 0) && (
+                    <div className="mt-8">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-bold text-ddor-navy flex items-center gap-2">
+                                <MessageSquare className="w-5 h-5 text-ddor-blue" />
+                                Messages & Mentions
+                                {notifications.totalUnread > 0 && (
+                                    <span className="ml-1 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full font-medium">
+                                        {notifications.totalUnread} unread
+                                    </span>
+                                )}
+                            </h2>
+                            <button onClick={() => router.push('/messages')}
+                                className="text-sm text-ddor-blue hover:underline flex items-center gap-1">
+                                Open Messages <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {/* @Mentions of you */}
+                            {(notifications.mentions || []).length > 0 && (
+                                <div className="bg-white rounded-xl shadow-sm p-5">
+                                    <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-3">
+                                        <AtSign className="w-4 h-4 text-purple-500" /> You were mentioned
+                                    </h3>
+                                    <div className="space-y-2.5">
+                                        {(notifications.mentions as any[]).slice(0, 4).map((m: any) => (
+                                            <button key={m.id} onClick={() => router.push(`/messages`)}
+                                                className="w-full text-left p-3 rounded-lg bg-purple-50/50 hover:bg-purple-50 transition-colors">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-xs font-medium text-purple-700">{m.sender_name}</span>
+                                                    <span className="text-xs text-gray-400">in #{m.channel_name}</span>
+                                                    <span className="text-xs text-gray-400 ml-auto">{new Date(m.created_at).toLocaleDateString()}</span>
+                                                </div>
+                                                <p className="text-sm text-gray-700 line-clamp-2">{m.body.replace(/@\[[^\]]+\]\([^)]+\)/g, (match: string) => {
+                                                    const name = match.match(/@\[([^\]]+)\]/)?.[1] || '';
+                                                    return `@${name}`;
+                                                })}</p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Unread DMs */}
+                            {(notifications.recentDMs || []).length > 0 && (
+                                <div className="bg-white rounded-xl shadow-sm p-5">
+                                    <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-3">
+                                        <Mail className="w-4 h-4 text-blue-500" /> Unread Direct Messages
+                                    </h3>
+                                    <div className="space-y-2.5">
+                                        {(notifications.recentDMs as any[]).slice(0, 4).map((m: any) => (
+                                            <button key={m.id} onClick={() => router.push(`/messages`)}
+                                                className="w-full text-left p-3 rounded-lg bg-blue-50/50 hover:bg-blue-50 transition-colors">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 text-xs font-medium flex-shrink-0">
+                                                        {m.sender_first?.[0]?.toUpperCase() || '?'}
+                                                    </div>
+                                                    <span className="text-xs font-medium text-gray-900">{m.sender_name}</span>
+                                                    <span className="text-xs text-gray-400 ml-auto">{new Date(m.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                                </div>
+                                                <p className="text-sm text-gray-700 line-clamp-2 pl-8">{m.body.replace(/@\[[^\]]+\]\([^)]+\)/g, (match: string) => {
+                                                    const name = match.match(/@\[([^\]]+)\]/)?.[1] || '';
+                                                    return `@${name}`;
+                                                })}</p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Unread Channel Messages */}
+                            {(notifications.recentChannel || []).length > 0 && (
+                                <div className="bg-white rounded-xl shadow-sm p-5">
+                                    <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-3">
+                                        <Hash className="w-4 h-4 text-green-500" /> Unread Channel Messages
+                                    </h3>
+                                    <div className="space-y-2.5">
+                                        {(notifications.recentChannel as any[]).slice(0, 4).map((m: any) => (
+                                            <button key={m.id} onClick={() => router.push(`/messages`)}
+                                                className="w-full text-left p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-xs font-medium text-gray-900">{m.sender_name}</span>
+                                                    <span className="text-xs text-gray-400">in #{m.channel_name}</span>
+                                                    <span className="text-xs text-gray-400 ml-auto">{new Date(m.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                                </div>
+                                                <p className="text-sm text-gray-700 line-clamp-2">{m.body.replace(/@\[[^\]]+\]\([^)]+\)/g, (match: string) => {
+                                                    const name = match.match(/@\[([^\]]+)\]/)?.[1] || '';
+                                                    return `@${name}`;
+                                                })}</p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* No unread — quiet state */}
+                            {notifications.totalUnread === 0 && (notifications.mentions || []).length === 0 && (
+                                <div className="bg-white rounded-xl shadow-sm p-5 flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                                        <MessageSquare className="w-5 h-5 text-green-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-gray-900">You're all caught up</p>
+                                        <p className="text-xs text-gray-500">No unread messages or mentions</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </main>
         </div>
     );

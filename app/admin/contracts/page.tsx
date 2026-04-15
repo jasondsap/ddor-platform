@@ -122,6 +122,7 @@ export default function ContractsPage() {
                                         <th className="text-center px-3 py-3 font-medium text-gray-600">W-9</th>
                                         <th className="text-center px-3 py-3 font-medium text-gray-600">ACH</th>
                                         <th className="text-center px-3 py-3 font-medium text-gray-600">Status</th>
+                                        <th className="text-center px-3 py-3 font-medium text-gray-600">Docs</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -129,12 +130,19 @@ export default function ContractsPage() {
                                         const allDone = p.contract_signed && p.baa_signed && p.w9_received && p.ach_received;
                                         const count = [p.contract_signed, p.baa_signed, p.w9_received, p.ach_received].filter(Boolean).length;
                                         const isSaving = saving === p.id;
+                                        const docCount = [p.doc_w9_key, p.doc_baa_key, p.doc_contract_key, p.doc_ach_key].filter(Boolean).length;
 
                                         return (
                                             <tr key={p.id} className="border-b last:border-0 hover:bg-gray-50">
                                                 <td className="px-4 py-3">
-                                                    <p className="font-medium text-gray-900">{p.name}</p>
-                                                    <p className="text-xs text-gray-500">{p.abbreviation || ''} • {p.facility_count || 0} facilities • {p.active_client_count || 0} clients</p>
+                                                    <button onClick={() => router.push(`/admin/contracts/${p.id}`)} className="text-left hover:underline">
+                                                        <p className="font-medium text-gray-900">{p.name}</p>
+                                                    </button>
+                                                    <p className="text-xs text-gray-500">
+                                                        {p.abbreviation || ''} • {p.facility_count || 0} facilities • {p.active_client_count || 0} clients
+                                                        {p.contract_contact_name && <span className="ml-1">• {p.contract_contact_name}</span>}
+                                                    </p>
+                                                    {p.contract_assignee && <p className="text-xs text-ddor-blue">{p.contract_assignee}</p>}
                                                 </td>
                                                 <td className="px-3 py-3 text-center">
                                                     <Check checked={p.has_participants || false} onClick={() => toggleField(p.id, 'has_participants', p.has_participants)} disabled={isSaving} />
@@ -157,6 +165,12 @@ export default function ContractsPage() {
                                                     ) : (
                                                         <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">{count}/4</span>
                                                     )}
+                                                </td>
+                                                <td className="px-3 py-3 text-center">
+                                                    <button onClick={() => router.push(`/admin/contracts/${p.id}`)}
+                                                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${docCount > 0 ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                                                        {docCount}/4
+                                                    </button>
                                                 </td>
                                             </tr>
                                         );

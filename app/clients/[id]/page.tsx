@@ -10,12 +10,12 @@ import {
     CheckCircle2, Archive, Edit, Shield, Stethoscope,
     ClipboardList, ChevronDown, ChevronUp,
     RefreshCw, GraduationCap, Bell, UserCheck,
-    MapPin, Phone, Mail, Building, Home
+    MapPin, Phone, Mail, Building, Home, MessageSquare, Send, Pin, Trash2, Tag
 } from 'lucide-react';
 import { REPORT_TYPE_LABELS, STATUS_COLORS } from '@/types';
 import type { ReportCompletionStatus } from '@/types';
 
-type Section = 'overview' | 'timeline' | 'reports' | 'assessments' | 'referral';
+type Section = 'overview' | 'timeline' | 'reports' | 'assessments' | 'referral' | 'notes';
 
 const SIDEBAR_ITEMS: { key: Section; label: string; icon: any }[] = [
     { key: 'overview', label: 'Overview', icon: User },
@@ -23,6 +23,7 @@ const SIDEBAR_ITEMS: { key: Section; label: string; icon: any }[] = [
     { key: 'reports', label: 'Submitted Reports', icon: FileText },
     { key: 'assessments', label: 'Assessments', icon: Activity },
     { key: 'referral', label: 'Referral', icon: Shield },
+    { key: 'notes', label: 'Notes', icon: MessageSquare },
 ];
 
 export default function ClientDetailPage() {
@@ -38,6 +39,8 @@ export default function ClientDetailPage() {
     const [questionnaires, setQuestionnaires] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [active, setActive] = useState<Section>('overview');
+    const [clientNotes, setClientNotes] = useState<any[]>([]);
+    const [newNote, setNewNote] = useState('');
 
     useEffect(() => { if (authStatus === 'unauthenticated') router.push('/auth/signin'); }, [authStatus, router]);
 
@@ -49,6 +52,7 @@ export default function ClientDetailPage() {
             .then(data => { setClient(data.client); setReferral(data.referral); setReports(data.reports || []); setQuestionnaires(data.questionnaires || []); })
             .catch(console.error)
             .finally(() => setLoading(false));
+        fetch(`/api/notes?client_id=${clientId}`).then(r => r.json()).then(d => setClientNotes(d.notes || []));
     }, [clientId, ddor?.userId]);
 
     if (authStatus === 'loading' || loading) {
@@ -134,7 +138,7 @@ export default function ClientDetailPage() {
                         <nav className="bg-white rounded-xl shadow-sm p-2 sticky top-6">
                             {SIDEBAR_ITEMS.map(item => {
                                 const isActive = active === item.key;
-                                const badge = item.key === 'reports' ? reports.length : item.key === 'assessments' ? questionnaires.length : item.key === 'timeline' && overdueCount > 0 ? overdueCount : 0;
+                                const badge = item.key === 'reports' ? reports.length : item.key === 'assessments' ? questionnaires.length : item.key === 'notes' ? clientNotes.length : item.key === 'timeline' && overdueCount > 0 ? overdueCount : 0;
                                 return (
                                     <button key={item.key} onClick={() => setActive(item.key)}
                                         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-0.5 ${isActive ? 'bg-ddor-blue text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
@@ -384,6 +388,83 @@ export default function ClientDetailPage() {
                                             className="text-sm text-ddor-blue hover:underline flex items-center gap-1">
                                             View Full Referral <ChevronRight className="w-4 h-4" />
                                         </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* NOTES */}
+                        {active === 'notes' && (
+                            <div className="bg-white rounded-xl shadow-sm p-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="font-semibold text-ddor-navy">Client Notes</h2>
+                                    <button onClick={() => router.push(`/notes?client_id=${clientId}`)}
+                                        className="text-xs text-ddor-blue hover:underline">View All Notes</button>
+                                </div>
+
+                                {/* Quick add */}
+                                <div className="flex gap-2 mb-4">
+                                    <textarea value={newNote} onChange={e => setNewNote(e.target.value)}
+                                        placeholder="Add a quick note..."
+                                        className="flex-1 p-3 border rounded-lg text-sm resize-none min-h-[44px]" rows={1} />
+                                    <button onClick={async () => {
+                                        if (!newNote.trim()) return;
+                                        await fetch('/api/notes', {
+                                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ content: newNote, client_id: clientId, note_type: 'General Note' }),
+                                        });
+                                        setNewNote('');
+                                        const d = await fetch(`/api/notes?client_id=${clientId}`).then(r => r.json());
+                                        setClientNotes(d.notes || []);
+                                    }} disabled={!newNote.trim()}
+                                        className="p-3 bg-ddor-blue text-white rounded-lg disabled:opacity-40">
+                                        <Send className="w-4 h-4" />
+                                    </button>
+                                </div>
+
+                                {clientNotes.length === 0 ? (
+                                    <p className="text-gray-400 text-sm text-center py-8">No notes yet for this client.</p>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {clientNotes.map(note => (
+                                            <div key={note.id} className={`p-3 rounded-lg border ${note.is_pinned ? 'border-amber-300 bg-amber-50/50' : 'border-gray-100 bg-gray-50'}`}>
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="flex-1 min-w-0">
+                                                        {note.title && <p className="text-sm font-medium text-gray-900 mb-0.5">{note.title}</p>}
+                                                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{note.content}</p>
+                                                        <div className="flex items-center gap-3 mt-2">
+                                                            <span className="text-xs text-gray-400">{new Date(note.created_at).toLocaleDateString()}</span>
+                                                            <span className="text-xs text-gray-400">{note.author_name}</span>
+                                                            {note.note_type && note.note_type !== 'General Note' && (
+                                                                <span className="text-xs px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded">{note.note_type}</span>
+                                                            )}
+                                                        </div>
+                                                        {note.tags && note.tags.length > 0 && note.tags[0] !== '' && (
+                                                            <div className="flex flex-wrap gap-1 mt-1.5">
+                                                                {note.tags.map((tag: string) => (
+                                                                    <span key={tag} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">{tag}</span>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex gap-0.5 flex-shrink-0">
+                                                        <button onClick={async () => {
+                                                            await fetch(`/api/notes/${note.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_pinned: !note.is_pinned }) });
+                                                            setClientNotes(prev => prev.map(n => n.id === note.id ? { ...n, is_pinned: !note.is_pinned } : n));
+                                                        }} className="p-1 hover:bg-gray-200 rounded">
+                                                            <Pin className={`w-3 h-3 ${note.is_pinned ? 'text-amber-500' : 'text-gray-300'}`} />
+                                                        </button>
+                                                        <button onClick={async () => {
+                                                            if (!confirm('Archive this note?')) return;
+                                                            await fetch(`/api/notes/${note.id}`, { method: 'DELETE' });
+                                                            setClientNotes(prev => prev.filter(n => n.id !== note.id));
+                                                        }} className="p-1 hover:bg-red-50 rounded">
+                                                            <Trash2 className="w-3 h-3 text-gray-300" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
                             </div>
