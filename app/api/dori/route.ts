@@ -108,6 +108,7 @@ Return ONLY a JSON object:
     "needsNotes": true/false,
     "needsAssessments": true/false,
     "needsProviders": true/false,
+    "providerName": "provider/agency name if mentioned, or null",
     "facilityName": "facility name if mentioned, or null",
     "diagnosisFilter": "sud/mh/co_occurring or null",
     "statusFilter": "active/archived/homeless or null"
@@ -334,6 +335,64 @@ async function executeQueries(plan: any, facilityId: string | null, isAdmin: boo
         });
     }
 
+    // Provider-specific detail (when a provider name is mentioned)
+    if (plan.providerName) {
+        await safeQuery('provider_detail', async () => {
+        const provName = plan.providerName.toLowerCase();
+
+        // Find the provider
+        const providers = await query(`
+            SELECT p.id, p.name, p.abbreviation,
+                COUNT(DISTINCT f.id) AS facility_count,
+                COUNT(DISTINCT c.id) AS total_clients,
+                COUNT(DISTINCT c.id) FILTER (WHERE c.is_archived = false) AS active_clients,
+                COUNT(DISTINCT c.id) FILTER (WHERE c.is_archived = true) AS archived_clients,
+                COUNT(DISTINCT c.id) FILTER (WHERE c.diagnosis = 'sud') AS sud_clients,
+                COUNT(DISTINCT c.id) FILTER (WHERE c.diagnosis = 'mh') AS mh_clients,
+                COUNT(DISTINCT c.id) FILTER (WHERE c.diagnosis = 'co_occurring') AS co_occurring_clients
+            FROM providers p
+            LEFT JOIN facilities f ON f.provider_id = p.id
+            LEFT JOIN clients c ON c.facility_id = f.id
+            WHERE LOWER(p.name) LIKE $1 OR LOWER(p.abbreviation) LIKE $1
+            GROUP BY p.id, p.name, p.abbreviation
+        `, [`%${provName}%`]);
+
+        if (providers.length > 0) {
+            const prov = providers[0] as any;
+            results.push({ type: 'provider_detail', data: prov });
+
+            // Get facilities for this provider
+            const facilities = await query(`
+                SELECT f.name, f.primary_service, f.city,
+                    COUNT(DISTINCT c.id) FILTER (WHERE c.is_archived = false) AS active_clients
+                FROM facilities f
+                LEFT JOIN clients c ON c.facility_id = f.id
+                WHERE f.provider_id = $1 AND f.is_inactive = false
+                GROUP BY f.id, f.name, f.primary_service, f.city
+                ORDER BY active_clients DESC
+            `, [prov.id]);
+            if (facilities.length > 0) results.push({ type: 'provider_facilities', data: facilities });
+
+            // Get client list for this provider
+            const clients = await query(`
+                SELECT c.first_name, c.last_name, c.ddor_id, c.diagnosis,
+                    c.is_archived, c.treatment_start_date,
+                    f.name AS facility_name,
+                    rt.fourteen_day_status, rt.forty_two_day_status,
+                    rt.ninety_day_status, rt.final_report_status
+                FROM clients c
+                JOIN facilities f ON c.facility_id = f.id
+                LEFT JOIN report_tracking rt ON rt.client_id = c.id
+                WHERE f.provider_id = $1 AND c.is_archived = false
+                ORDER BY c.last_name LIMIT 25
+            `, [prov.id]);
+            if (clients.length > 0) results.push({ type: 'provider_clients', data: clients });
+        } else {
+            results.push({ type: 'not_found', data: { name: plan.providerName } });
+        }
+        });
+    }
+
     return results;
 }
 
@@ -422,6 +481,26 @@ Recent: ${inv.recent.map((i: any) => `$${i.payment_due} (${i.reimbursement_statu
             case 'providers':
                 sections.push(`**Providers:**\n${r.data.map((p: any) =>
                     `- ${p.name} (${p.abbreviation || 'N/A'}): ${p.facility_count} facilities, ${p.client_count} active clients`
+                ).join('\n')}`);
+                break;
+
+            case 'provider_detail':
+                const pd = r.data;
+                sections.push(`**${pd.name}** (${pd.abbreviation || 'N/A'}):
+- Facilities: ${pd.facility_count}
+- Total Clients: ${pd.total_clients} (Active: ${pd.active_clients}, Archived: ${pd.archived_clients})
+- SUD: ${pd.sud_clients}, MH: ${pd.mh_clients}, Co-Occurring: ${pd.co_occurring_clients}`);
+                break;
+
+            case 'provider_facilities':
+                sections.push(`**Facilities:**\n${r.data.map((f: any) =>
+                    `- ${f.name}${f.city ? ` (${f.city})` : ''}: ${f.primary_service || 'N/A'}, ${f.active_clients} active clients`
+                ).join('\n')}`);
+                break;
+
+            case 'provider_clients':
+                sections.push(`**Active Clients (${r.data.length}):**\n${r.data.map((c: any) =>
+                    `- ${c.first_name} ${c.last_name} (${c.ddor_id || 'N/A'}) — ${c.diagnosis || '?'}, Facility: ${c.facility_name}, 14d: ${c.fourteen_day_status || 'N/A'}, Final: ${c.final_report_status || 'N/A'}`
                 ).join('\n')}`);
                 break;
         }
