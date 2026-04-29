@@ -8,7 +8,7 @@ import {
     Users, AlertTriangle, Clock, FileText, TrendingUp,
     ChevronRight, Loader2, Activity, ClipboardList,
     DollarSign, MapPin, ArrowRight, Bell, MessageSquare,
-    AtSign, Mail, Hash, User, BarChart2
+    AtSign, Mail, Hash, User
 } from 'lucide-react';
 import type { ReportCompletionStatus } from '@/types';
 import { STATUS_COLORS } from '@/types';
@@ -33,7 +33,8 @@ export default function DashboardPage() {
 
     useEffect(() => {
         if (status === 'unauthenticated') router.push('/auth/signin');
-    }, [status, router]);
+        if (status === 'authenticated' && ddor?.role === 'court_assessor') router.push('/court');
+    }, [status, ddor, router]);
 
     useEffect(() => {
         if (!ddor) return;
@@ -126,14 +127,13 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Quick Actions */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-10">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-10">
                     {[
                         { label: 'Referred Clients', icon: Users, href: '/clients', color: '#2563eb' },
                         { label: 'Report Tracking', icon: ClipboardList, href: '/report-tracking', color: '#d97706' },
                         { label: 'Submit Report', icon: FileText, href: '/reports/new', color: '#10B981' },
                         { label: 'Initiation', icon: Bell, href: '/initiation/new', color: '#dc2626' },
                         { label: 'Assessments', icon: Activity, href: '/assessments', color: '#7c3aed' },
-                        { label: 'Quarterly Report', icon: BarChart2, href: '/analytics/quarterly-report', color: '#1F3864' },
                     ].map((action) => (
                         <button
                             key={action.label}

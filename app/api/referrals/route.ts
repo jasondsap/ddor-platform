@@ -12,6 +12,8 @@ export async function GET(req: NextRequest) {
         const status = searchParams.get('status'); // 'open', 'closed', 'all'
         const countyId = searchParams.get('county_id');
         const search = searchParams.get('search');
+        const assessorStatus = searchParams.get('assessor_status');
+        const referralStatus = searchParams.get('referral_type_status');
 
         let sql = `
             SELECT
@@ -67,10 +69,26 @@ export async function GET(req: NextRequest) {
             paramIdx++;
         }
 
-        sql += ` ORDER BY r.date_received DESC NULLS LAST, r.created_at DESC`;
+        if (assessorStatus) {
+            sql += ` AND r.assessor_status = $${paramIdx}`;
+            params.push(assessorStatus);
+            paramIdx++;
+        }
+
+        if (referralStatus) {
+            sql += ` AND r.referral_type_status = $${paramIdx}`;
+            params.push(referralStatus);
+            paramIdx++;
+        }
+
+        sql += ` ORDER BY r.is_urgent DESC, r.date_received DESC NULLS LAST, r.created_at DESC`;
 
         const referrals = await query(sql, params);
-        return NextResponse.json({ referrals });
+
+        // Get counties for filter dropdown
+        const counties = await query(`SELECT DISTINCT co.id, co.name FROM referrals r JOIN counties co ON r.originating_county_id = co.id WHERE co.name IS NOT NULL ORDER BY co.name`);
+
+        return NextResponse.json({ referrals, counties });
     } catch (error: any) {
         if (error.message === 'Unauthorized') {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -120,6 +138,8 @@ export async function POST(req: NextRequest) {
             major_medical_issues: body.major_medical_issues || false,
             prior_participant: body.prior_participant || null,
             notes: body.notes || null,
+            case_navigator_name: body.case_navigator_name || null,
+            case_navigator_email: body.case_navigator_email || null,
             created_by: getUserId(session),
         });
 
@@ -130,6 +150,28 @@ export async function POST(req: NextRequest) {
                     referral_id: (referral as any).id,
                     attribute_type: 'sb90_charge',
                     value: charge,
+                });
+            }
+        }
+
+        // Insert substance charges
+        if (body.sb90_substance_charges && Array.isArray(body.sb90_substance_charges)) {
+            for (const charge of body.sb90_substance_charges) {
+                await insert('referral_attributes', {
+                    referral_id: (referral as any).id,
+                    attribute_type: 'sb90_substance_charge',
+                    value: charge,
+                });
+            }
+        }
+
+        // Insert reassessment reasons
+        if (body.reassessment_reasons && Array.isArray(body.reassessment_reasons)) {
+            for (const reason of body.reassessment_reasons) {
+                await insert('referral_attributes', {
+                    referral_id: (referral as any).id,
+                    attribute_type: 'reassessment_reason',
+                    value: reason,
                 });
             }
         }
