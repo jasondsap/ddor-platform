@@ -14,7 +14,7 @@ const DORI_SYSTEM_PROMPT = `You are Dori, an intelligent assistant for the DDOR 
 You have access to program data and can answer questions about:
 - **Clients/Participants**: names, status, diagnosis, facility, treatment dates, insurance
 - **Reports**: 14-Day, 42-Day, 90-Day, 180-Day, 270-Day, 360-Day progress reports; overdue and upcoming
-- **Referrals**: incoming referral pipeline, eligibility, case navigators
+- **Referrals**: full referral pipeline including candidate info (DOB, gender, phone, county), referral status, assessor status, eligibility, housing, insurance, location, clinical flags (SMI, TBI, medical), charges (SB90 substance + general), court dates, case navigator, LOC recommendation, linked client status, urgency, and notes. You can look up specific referrals by name, find the latest referrals, and provide referral statistics.
 - **Invoices**: billing status, payment amounts, approval pipeline
 - **Assessments**: BARC-10, PHQ-9/GAD-7, GAIN-SS scores
 - **Notes**: client documentation and case notes
@@ -98,20 +98,28 @@ Question: "${question}"
 
 Return ONLY a JSON object:
 {
-    "clientName": "name if mentioned, or null",
+    "clientName": "name if a client/participant is mentioned, or null",
+    "referralName": "name if asking about a specific referral candidate, or null",
     "needsClientList": true/false,
     "needsClientStats": true/false,
     "needsReportTracking": true/false,
     "needsOverdueReports": true/false,
     "needsReferrals": true/false,
+    "needsReferralStats": true/false,
+    "needsLatestReferral": true/false,
     "needsInvoices": true/false,
     "needsNotes": true/false,
     "needsAssessments": true/false,
     "needsProviders": true/false,
     "facilityName": "facility name if mentioned, or null",
+    "countyName": "county name if mentioned, or null",
     "diagnosisFilter": "sud/mh/co_occurring or null",
     "statusFilter": "active/archived/homeless or null"
 }
+
+Important: If someone asks about a "referral" for a person, set referralName. If they ask about a "client" or "participant", set clientName. If ambiguous, set both.
+If they ask "who is the latest referral" or "most recent referral", set needsLatestReferral to true.
+If they ask about referral counts, breakdowns, or summaries, set needsReferralStats to true.
 
 Return ONLY the JSON, no other text.`;
 
@@ -244,15 +252,112 @@ async function executeQueries(plan: any, facilityId: string | null, isAdmin: boo
         });
     }
 
-    // Referrals
+    // Search specific referral by name
+    if (plan.referralName) {
+        await safeQuery('referral_search', async () => {
+        const name = plan.referralName.toLowerCase();
+        const refs = await query(`
+            SELECT r.id, r.first_name, r.last_name, r.referral_number, r.date_of_birth,
+                r.gender, r.phone, r.date_received, r.referral_date, r.court_date,
+                r.screen_date, r.assessor_status, r.eligibility,
+                r.referral_type_status, r.closed_reason, r.initial_housing,
+                r.has_insurance, r.location_at_referral,
+                r.is_urgent, r.urgent_message,
+                r.smi_symptoms, r.tbi_abi, r.major_medical_issues,
+                r.prior_participant, r.loc_recommendation,
+                r.case_navigator_name, r.case_navigator_email,
+                r.jail_at_referral, r.notes,
+                co.name AS county_name,
+                f.name AS recommended_facility_name,
+                c.id AS linked_client_id,
+                c.first_name || ' ' || c.last_name AS linked_client_name
+            FROM referrals r
+            LEFT JOIN counties co ON r.originating_county_id = co.id
+            LEFT JOIN facilities f ON r.provider_recommendation_id = f.id
+            LEFT JOIN clients c ON r.client_id = c.id
+            WHERE r.is_archived = false
+            AND (LOWER(r.first_name) LIKE $1 OR LOWER(r.last_name) LIKE $1
+                 OR LOWER(r.first_name || ' ' || r.last_name) LIKE $1)
+            ORDER BY r.date_received DESC
+            LIMIT 5
+        `, [`%${name}%`]);
+
+        if (refs.length > 0) {
+            results.push({ type: 'referral_detail', data: refs });
+            // Also get charges for the first match
+            const charges = await query(`
+                SELECT attribute_type, value FROM referral_attributes WHERE referral_id = $1
+            `, [(refs[0] as any).id]);
+            if (charges.length > 0) results.push({ type: 'referral_charges', data: charges });
+        } else {
+            results.push({ type: 'referral_not_found', data: { name: plan.referralName } });
+        }
+        });
+    }
+
+    // Latest referral
+    if (plan.needsLatestReferral) {
+        await safeQuery('latest_referral', async () => {
+        const latest = await query(`
+            SELECT r.first_name, r.last_name, r.referral_number, r.date_received,
+                r.referral_date, r.assessor_status, r.eligibility,
+                r.referral_type_status, r.initial_housing, r.has_insurance,
+                r.location_at_referral, r.is_urgent, r.case_navigator_name,
+                co.name AS county_name,
+                f.name AS recommended_facility_name
+            FROM referrals r
+            LEFT JOIN counties co ON r.originating_county_id = co.id
+            LEFT JOIN facilities f ON r.provider_recommendation_id = f.id
+            WHERE r.is_archived = false
+            ORDER BY r.date_received DESC NULLS LAST, r.created_at DESC
+            LIMIT 3
+        `);
+        results.push({ type: 'latest_referrals', data: latest });
+        });
+    }
+
+    // Referral stats
+    if (plan.needsReferralStats) {
+        await safeQuery('referral_stats', async () => {
+        const stats = await query(`
+            SELECT
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE referral_type_status != 'closed' AND is_archived = false) AS open,
+                COUNT(*) FILTER (WHERE referral_type_status = 'closed') AS closed,
+                COUNT(*) FILTER (WHERE referral_type_status = 'open_within_72_hours') AS within_72hr,
+                COUNT(*) FILTER (WHERE referral_type_status = 'open_72_to_2_weeks') AS wk_2,
+                COUNT(*) FILTER (WHERE referral_type_status = 'open_2_weeks_to_2_months') AS mo_2,
+                COUNT(*) FILTER (WHERE referral_type_status = 'inactive_2_months_plus') AS inactive,
+                COUNT(*) FILTER (WHERE is_urgent = true AND referral_type_status != 'closed') AS urgent,
+                COUNT(*) FILTER (WHERE assessor_status = 'Screened') AS screened,
+                COUNT(*) FILTER (WHERE assessor_status = 'Pending') AS pending,
+                COUNT(*) FILTER (WHERE client_id IS NOT NULL) AS linked_to_client,
+                COUNT(*) FILTER (WHERE eligibility = 'Pretrial Eligible') AS pretrial_eligible
+            FROM referrals WHERE is_archived = false
+        `);
+        const byCounty = await query(`
+            SELECT co.name AS county, COUNT(*) AS count
+            FROM referrals r
+            LEFT JOIN counties co ON r.originating_county_id = co.id
+            WHERE r.is_archived = false AND co.name IS NOT NULL
+            GROUP BY co.name ORDER BY count DESC LIMIT 10
+        `);
+        results.push({ type: 'referral_stats', data: { summary: stats[0], byCounty } });
+        });
+    }
+
+    // General referrals list (recent)
     if (plan.needsReferrals) {
         await safeQuery('referrals', async () => {
         const referrals = await query(`
             SELECT r.first_name, r.last_name, r.referral_number, r.date_received,
-                r.eligibility, r.referral_type_status,
-                co.name AS county_name
+                r.assessor_status, r.eligibility, r.referral_type_status,
+                r.initial_housing, r.is_urgent, r.case_navigator_name,
+                co.name AS county_name,
+                c.id AS linked_client_id
             FROM referrals r
             LEFT JOIN counties co ON r.originating_county_id = co.id
+            LEFT JOIN clients c ON r.client_id = c.id
             WHERE r.is_archived = false
             ORDER BY r.date_received DESC LIMIT 10
         `);
@@ -395,9 +500,61 @@ function buildContextPrompt(results: any[]): string {
                 }).join('\n')}`);
                 break;
 
+            case 'referral_detail':
+                sections.push(`**Referral(s) Found:**\n${r.data.map((ref: any) => {
+                    const lines = [
+                        `- **${ref.first_name} ${ref.last_name}** (#${ref.referral_number || 'N/A'})`,
+                        `  Status: ${ref.referral_type_status?.replace(/_/g, ' ')}, Assessor: ${ref.assessor_status || 'N/A'}, Eligibility: ${ref.eligibility || 'N/A'}`,
+                        `  County: ${ref.county_name || 'N/A'}, Location: ${ref.location_at_referral || 'N/A'}`,
+                        `  DOB: ${ref.date_of_birth ? new Date(ref.date_of_birth).toLocaleDateString() : 'N/A'}, Gender: ${ref.gender || 'N/A'}, Phone: ${ref.phone || 'N/A'}`,
+                        `  Received: ${ref.date_received ? new Date(ref.date_received).toLocaleDateString() : 'N/A'}, Referral Date: ${ref.referral_date ? new Date(ref.referral_date).toLocaleDateString() : 'N/A'}, Court Date: ${ref.court_date ? new Date(ref.court_date).toLocaleDateString() : 'N/A'}`,
+                        `  Screen Date: ${ref.screen_date ? new Date(ref.screen_date).toLocaleDateString() : 'N/A'}`,
+                        `  Housing: ${ref.initial_housing || 'N/A'}, Insurance: ${ref.has_insurance || 'N/A'}`,
+                        `  LOC Recommendation: ${ref.loc_recommendation || 'N/A'}, Recommended Facility: ${ref.recommended_facility_name || 'N/A'}`,
+                        `  Navigator: ${ref.case_navigator_name || 'N/A'} (${ref.case_navigator_email || ''})`,
+                        `  Urgent: ${ref.is_urgent ? 'YES' : 'No'}${ref.urgent_message ? ` — ${ref.urgent_message}` : ''}`,
+                        `  Clinical: SMI: ${ref.smi_symptoms ? 'Yes' : 'No'}, TBI: ${ref.tbi_abi ? 'Yes' : 'No'}, Medical: ${ref.major_medical_issues ? 'Yes' : 'No'}`,
+                        `  Prior Participant: ${ref.prior_participant || 'N/A'}, In Jail: ${ref.jail_at_referral ? 'Yes' : 'No'}`,
+                        ref.linked_client_name ? `  Linked Client: ${ref.linked_client_name}` : '  Linked Client: Not yet linked',
+                        ref.notes ? `  Notes: ${ref.notes.substring(0, 150)}...` : '',
+                    ];
+                    return lines.filter(Boolean).join('\n');
+                }).join('\n\n')}`);
+                break;
+
+            case 'referral_charges':
+                const chargeGroups: Record<string, string[]> = {};
+                for (const c of r.data) {
+                    if (!chargeGroups[c.attribute_type]) chargeGroups[c.attribute_type] = [];
+                    chargeGroups[c.attribute_type].push(c.value);
+                }
+                const chargeLines = Object.entries(chargeGroups).map(([type, vals]) =>
+                    `  ${type.replace(/_/g, ' ')}: ${vals.join(', ')}`
+                );
+                sections.push(`**Charges:**\n${chargeLines.join('\n')}`);
+                break;
+
+            case 'referral_not_found':
+                sections.push(`**Referral Not Found:** No referral matching "${r.data.name}" in the system.`);
+                break;
+
+            case 'latest_referrals':
+                sections.push(`**Latest Referrals:**\n${r.data.map((ref: any) =>
+                    `- ${ref.first_name} ${ref.last_name} (#${ref.referral_number || 'N/A'}) — ${ref.county_name || 'N/A'} County, Received: ${ref.date_received ? new Date(ref.date_received).toLocaleDateString() : 'N/A'}, Status: ${ref.referral_type_status?.replace(/_/g, ' ')}, Assessor: ${ref.assessor_status || 'N/A'}${ref.is_urgent ? ' [URGENT]' : ''}`
+                ).join('\n')}`);
+                break;
+
+            case 'referral_stats':
+                const rs = r.data.summary;
+                sections.push(`**Referral Statistics:** Total: ${rs.total}, Open: ${rs.open}, Closed: ${rs.closed}, Urgent: ${rs.urgent}, Within 72hr: ${rs.within_72hr}, 72hr-2wk: ${rs.wk_2}, 2wk-2mo: ${rs.mo_2}, Inactive 2mo+: ${rs.inactive}, Screened: ${rs.screened}, Pending: ${rs.pending}, Linked to Client: ${rs.linked_to_client}, Pretrial Eligible: ${rs.pretrial_eligible}`);
+                if (r.data.byCounty?.length > 0) {
+                    sections.push(`**Referrals by County:** ${r.data.byCounty.map((c: any) => `${c.county}: ${c.count}`).join(', ')}`);
+                }
+                break;
+
             case 'referrals':
                 sections.push(`**Recent Referrals (${r.data.length}):**\n${r.data.map((ref: any) =>
-                    `- ${ref.first_name} ${ref.last_name} (#${ref.referral_number || 'N/A'}) — ${ref.eligibility || 'Pending'}, ${ref.county_name || 'N/A'} County, Received: ${ref.date_received ? new Date(ref.date_received).toLocaleDateString() : 'N/A'}`
+                    `- ${ref.first_name} ${ref.last_name} (#${ref.referral_number || 'N/A'}) — ${ref.county_name || 'N/A'} County, ${ref.assessor_status || 'N/A'}, ${ref.referral_type_status?.replace(/_/g, ' ')}, Received: ${ref.date_received ? new Date(ref.date_received).toLocaleDateString() : 'N/A'}${ref.is_urgent ? ' [URGENT]' : ''}${ref.linked_client_id ? ' [Linked]' : ''}`
                 ).join('\n')}`);
                 break;
 

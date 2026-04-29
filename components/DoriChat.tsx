@@ -60,7 +60,8 @@ export default function DoriChat() {
     const quickQuestions = [
         "How many active participants do I have?",
         "Who has overdue reports?",
-        "Show me recent referrals",
+        "Who is the latest referral?",
+        "How many open referrals do we have?",
         "What's the invoice summary?",
     ];
 
@@ -192,7 +193,7 @@ export default function DoriChat() {
                     </button>
                 </div>
                 <p className="text-xs text-gray-400 mt-2 text-center">
-                    Try: "Does Joseph have overdue reports?" or "How many SUD clients?"
+                    Try: "What's the referral status of John Doe?" or "Who is the latest referral?"
                 </p>
             </form>
         </div>
