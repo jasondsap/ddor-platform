@@ -1,6 +1,18 @@
 // lib/generateReportPDF.ts
-// Generate branded PDF for any DDOR report
-// Pattern follows PSS generateGoalPDF.ts
+// Generate branded PDF for any DDOR report.
+//
+// Updated for FGI May 2026 spec:
+//   - householdIncome / dependents are now `string` (caller pre-formats).
+//   - Renders new fields when present in EAV: enrollment_status, treated_sud,
+//     treated_mh, treatment_start_date (14-Day), sud_loc_recommended,
+//     mh_loc_recommended (Final), treatment_facility, mat_services, and
+//     the *_other text fields under their parent values.
+//   - Clinical-section labels switch to "at Discharge" wording for Final.
+//   - Service grids hide the "Plans to Provide" column when there's no
+//     planned data (legacy reports still show both columns).
+//   - "Living Expenses / Barriers" label renamed to "Barriers Note".
+//
+// Pattern follows PSS generateGoalPDF.ts.
 
 import jsPDF from 'jspdf';
 
@@ -24,15 +36,15 @@ interface ReportPDFData {
     programStatus?: string;
     attendance?: string;
     isReceivingMat?: boolean;
-    householdIncome?: number;
-    dependents?: number;
+    householdIncome?: string | null;   // pre-formatted by caller (legacy "$45,000" or new "$0 - 15,000")
+    dependents?: string;               // string ("3", "10+", etc.)
     // Discharge
     wasDischarged?: boolean;
     dischargeDate?: string;
     dischargeReason?: string;
     referredProvider?: string;
     referredLoc?: string;
-    // KYAE
+    // KYAE (legacy)
     kyaeReferralStatus?: string;
     kyaeEducationStatus?: string;
     kyaeEmploymentStatus?: string;
@@ -40,7 +52,7 @@ interface ReportPDFData {
     barrierNotes?: string;
     recommendationNotes?: string;
     notes?: string;
-    // Attributes (multi-value)
+    // Attributes (EAV — multi-value or new scalar attrs)
     attributes: Record<string, string[]>;
 }
 
@@ -53,13 +65,25 @@ export function generateReportPDF(data: ReportPDFData) {
     const maxWidth = pageWidth - margin * 2;
     const lh = 5.5;
 
+    const attrs = data.attributes || {};
+    const isFinal = data.reportType === 'final_report';
+    const is14Day = data.reportType === 'fourteen_day';
+
+    // First scalar value from an EAV key
+    const firstAttr = (key: string): string | undefined => attrs[key]?.[0];
+
     // DDOR brand colors
     const navy = { r: 26, g: 43, b: 74 };
     const blue = { r: 26, g: 115, b: 168 };
     const teal = { r: 45, g: 212, b: 191 };
     const gray = { r: 107, g: 114, b: 128 };
+    const green = { r: 16, g: 185, b: 129 };
+    const purple = { r: 139, g: 92, b: 246 };
+    const red = { r: 239, g: 68, b: 68 };
 
-    const checkPage = (need: number = 20) => { if (y > pageHeight - need) { doc.addPage(); y = margin; } };
+    const checkPage = (need: number = 20) => {
+        if (y > pageHeight - need) { doc.addPage(); y = margin; }
+    };
 
     const text = (t: string, size: number = 9, bold = false, color = { r: 0, g: 0, b: 0 }) => {
         doc.setFontSize(size);
@@ -117,6 +141,17 @@ export function generateReportPDF(data: ReportPDFData) {
         y += 8;
     };
 
+    // Format ISO date string to locale string. Returns undefined if input is empty.
+    const fmtDate = (iso?: string): string | undefined => {
+        if (!iso) return undefined;
+        try {
+            const d = new Date(iso);
+            return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString();
+        } catch {
+            return iso;
+        }
+    };
+
     // =====================================================
     // HEADER
     // =====================================================
@@ -143,6 +178,8 @@ export function generateReportPDF(data: ReportPDFData) {
 
     // =====================================================
     // PARTICIPANT INFO
+    // Final spec adds treatment_facility (provider's own facility name); prefer
+    // that over the joined facility name when present.
     // =====================================================
     sectionHeader('Participant Information');
     const col1 = margin, col2 = margin + 60, col3 = margin + 120;
@@ -152,39 +189,72 @@ export function generateReportPDF(data: ReportPDFData) {
     y += 10;
     fieldInline('Diagnosis', data.diagnosis === 'co_occurring' ? 'Co-Occurring' : data.diagnosis?.toUpperCase(), col1, 60);
     fieldInline('Provider', data.providerName, col2, 60);
-    fieldInline('Facility', data.facilityName, col3, 50);
+    fieldInline('Facility', firstAttr('treatment_facility') || data.facilityName, col3, 50);
     y += 10;
 
     // =====================================================
     // CLINICAL
     // =====================================================
-    if (data.sudLoc || data.mhLoc || data.programStatus) {
+    const hasClinical = data.sudLoc || data.mhLoc || data.programStatus
+        || firstAttr('sud_loc_recommended') || firstAttr('mh_loc_recommended')
+        || firstAttr('treatment_start_date') || firstAttr('treated_sud') || firstAttr('treated_mh')
+        || data.householdIncome || data.dependents;
+    if (hasClinical) {
         sectionHeader('Clinical Information');
-        field('Current SUD Level of Care', data.sudLoc);
-        field('Current MH Level of Care', data.mhLoc);
+        field(isFinal ? 'SUD Level of Care at Discharge' : 'Current SUD Level of Care', data.sudLoc);
+        field(isFinal ? 'MH Level of Care at Discharge' : 'Current MH Level of Care', data.mhLoc);
+        if (isFinal) {
+            field('Recommended SUD LOC upon Discharge', firstAttr('sud_loc_recommended'));
+            field('Recommended MH LOC upon Discharge', firstAttr('mh_loc_recommended'));
+        }
         field('Program Status', data.programStatus);
         field('Treatment Attendance', data.attendance);
-        field('Receiving MAT', data.isReceivingMat ? 'Yes' : data.isReceivingMat === false ? 'No' : undefined);
-        if (data.householdIncome) field('Household Income', `$${data.householdIncome.toLocaleString()}`);
-        if (data.dependents !== undefined && data.dependents !== null) field('Dependents', data.dependents.toString());
+        field(
+            'Receiving MAT',
+            data.isReceivingMat === true ? 'Yes' :
+            data.isReceivingMat === false ? 'No' : undefined,
+        );
+        if (is14Day) {
+            field('Treatment Start Date', fmtDate(firstAttr('treatment_start_date')));
+            field('Treated for SUD in past year', firstAttr('treated_sud'));
+            field('Treated for MH in past year', firstAttr('treated_mh'));
+        }
+        if (data.householdIncome) field('Annual Household Income', data.householdIncome);
+        if (data.dependents) field('Dependents', data.dependents);
     }
 
     // =====================================================
     // PARTICIPANT STATUS
     // =====================================================
-    const attrs = data.attributes;
-    if (attrs.living_situation?.length || attrs.employment_status?.length || attrs.insurance_type?.length) {
+    if (
+        attrs.living_situation?.length || attrs.employment_status?.length || attrs.insurance_type?.length
+        || attrs.criminal_justice?.length || firstAttr('months_unemployed')
+        || firstAttr('education_level') || firstAttr('enrollment_status')
+    ) {
         sectionHeader('Participant Status');
-        tagList('Living Situation', attrs.living_situation, { r: 16, g: 185, b: 129 });
+        tagList('Living Situation', attrs.living_situation, green);
         tagList('Employment Status', attrs.employment_status, blue);
-        tagList('Insurance', attrs.insurance_type, { r: 139, g: 92, b: 246 });
-        tagList('Criminal Justice', attrs.criminal_justice, { r: 239, g: 68, b: 68 });
+        field('Education Enrollment Status', firstAttr('enrollment_status'));
+        tagList('Insurance', attrs.insurance_type, purple);
+        field('Months Unemployed (past 12)', firstAttr('months_unemployed'));
+        field('Education Level', firstAttr('education_level'));
+        tagList('Criminal Justice', attrs.criminal_justice, red);
     }
 
     // =====================================================
     // SERVICES
+    // Hides "Plans to Provide" column when there's no planned data.
+    // Legacy reports may still have planned data and will render both columns.
     // =====================================================
     const serviceKeys = ['treatment', 'case_mgmt', 'medical', 'aftercare', 'educational', 'recovery'];
+    const labelMap: Record<string, string> = {
+        treatment: 'Treatment Services',
+        case_mgmt: 'Case Management',
+        medical: 'Medical Services',
+        aftercare: 'Aftercare',
+        educational: 'Educational/Vocational',
+        recovery: 'Recovery Support',
+    };
     const hasServices = serviceKeys.some(k => attrs[`${k}_provided`]?.length || attrs[`${k}_planned`]?.length);
     if (hasServices) {
         sectionHeader('Services');
@@ -192,17 +262,24 @@ export function generateReportPDF(data: ReportPDFData) {
             const provided = attrs[`${key}_provided`];
             const planned = attrs[`${key}_planned`];
             if (!provided?.length && !planned?.length) continue;
-            const label = key.replace('_', ' ').replace(/^\w/, c => c.toUpperCase());
             checkPage(15);
             doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(navy.r, navy.g, navy.b);
-            doc.text(label, margin, y); y += 5;
-            tagList('Provided to Date', provided, { r: 16, g: 185, b: 129 });
-            tagList('Plans to Provide', planned, blue);
+            doc.text(labelMap[key] || key, margin, y); y += 5;
+            tagList('Provided to Date', provided, green);
+            if (planned?.length) tagList('Plans to Provide', planned, blue);
         }
     }
 
     // =====================================================
-    // KYAE
+    // MAT SERVICES (multi-select tag list — was missing previously)
+    // =====================================================
+    if (attrs.mat_services?.length) {
+        sectionHeader('MAT Services');
+        tagList('Medications/Services', attrs.mat_services, purple);
+    }
+
+    // =====================================================
+    // KYAE (legacy only)
     // =====================================================
     if (data.kyaeReferralStatus || data.kyaeEducationStatus || data.kyaeEmploymentStatus) {
         sectionHeader('KYAE Education & Employment');
@@ -214,14 +291,33 @@ export function generateReportPDF(data: ReportPDFData) {
     // =====================================================
     // DISCHARGE
     // =====================================================
-    if (data.wasDischarged || data.dischargeReason) {
+    if (data.wasDischarged || data.dischargeReason || isFinal) {
         sectionHeader('Discharge & Referral');
         field('Discharge Reason', data.dischargeReason);
+        if (firstAttr('discharge_reason_other')) {
+            field('Discharge Reason — Other', firstAttr('discharge_reason_other'));
+        }
         field('Discharge Date', data.dischargeDate);
         field('Referred Provider', data.referredProvider);
         field('Referred LOC', data.referredLoc);
-        tagList('Goals Achieved', attrs.goals_achieved, { r: 16, g: 185, b: 129 });
-        tagList('Barriers', attrs.barriers, { r: 239, g: 68, b: 68 });
+    }
+
+    // =====================================================
+    // GOALS & BARRIERS
+    // =====================================================
+    if (
+        attrs.goals_achieved?.length || attrs.barriers?.length
+        || firstAttr('goals_achieved_other') || firstAttr('barriers_other')
+    ) {
+        sectionHeader('Goals & Barriers');
+        tagList('Goals Achieved', attrs.goals_achieved, green);
+        if (firstAttr('goals_achieved_other')) {
+            field('Goals Achieved — Other', firstAttr('goals_achieved_other'));
+        }
+        tagList('Barriers', attrs.barriers, red);
+        if (firstAttr('barriers_other')) {
+            field('Barriers — Other', firstAttr('barriers_other'));
+        }
     }
 
     // =====================================================
@@ -229,7 +325,7 @@ export function generateReportPDF(data: ReportPDFData) {
     // =====================================================
     if (data.barrierNotes || data.recommendationNotes || data.notes) {
         sectionHeader('Notes & Recommendations');
-        if (data.barrierNotes) { text('Living Expenses / Barriers:', 9, true, gray); text(data.barrierNotes, 9); y += 3; }
+        if (data.barrierNotes) { text('Barriers Note:', 9, true, gray); text(data.barrierNotes, 9); y += 3; }
         if (data.recommendationNotes) { text('Recommendations:', 9, true, gray); text(data.recommendationNotes, 9); y += 3; }
         if (data.notes) { text('Additional Notes:', 9, true, gray); text(data.notes, 9); }
     }
@@ -243,11 +339,12 @@ export function generateReportPDF(data: ReportPDFData) {
         doc.setDrawColor(200, 200, 200);
         doc.line(margin, y, margin + maxWidth, y);
         y += 8;
-        doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(16, 185, 129);
+        doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(green.r, green.g, green.b);
         doc.text('✓ Electronically Signed', margin, y); y += 5;
         doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'normal');
         let sigLine = data.submitterName || '';
         if (data.submitterCredential) sigLine += `, ${data.submitterCredential}`;
+        if (firstAttr('credential_other')) sigLine += ` (${firstAttr('credential_other')})`;
         if (data.signatureDate) sigLine += ` — ${data.signatureDate}`;
         doc.text(sigLine, margin, y);
     }

@@ -181,6 +181,7 @@ export default function ClientDetailPage() {
                                             <DetailRow label="Diagnosis" value={client.diagnosis?.replace('_', '-').toUpperCase()} />
                                             <DetailRow label="OUD" value={client.has_oud ? 'Yes' : 'No'} />
                                             <DetailRow label="ZIP" value={client.zip} />
+                                            <DetailRow label="Originating County" value={referral?.originating_county_name} />
                                         </dl>
                                     </div>
                                     <div>

@@ -136,36 +136,42 @@ export default function ReferralDetailPage() {
         if (!confirm(`Create a new client from this referral for ${referral.first_name} ${referral.last_name}?`)) return;
         setCreatingClient(true);
         try {
+            // Server-side: fetches referral data, merges fields, creates client,
+            // creates report_tracking with proper defaults, links referral back.
+            // Single round trip = atomic from the page's perspective.
             const res = await fetch('/api/clients', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    first_name: referral.first_name,
-                    last_name: referral.last_name,
-                    date_of_birth: referral.date_of_birth || null,
-                    gender: referral.gender || null,
-                    facility_id: referral.provider_recommendation_id || null,
-                    diagnosis: null,
-                    insurance_status: referral.has_insurance || null,
-                    zip: null,
-                }),
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ referral_id: referralId }),
             });
-            if (!res.ok) { alert('Failed to create client'); setCreatingClient(false); return; }
-            const data = await res.json();
-            const clientId = data.client?.id;
-
-            if (clientId) {
-                // Link client to referral
-                await fetch(`/api/referrals/${referralId}`, {
-                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        client_id: clientId,
-                        _log_activity: { type: 'status_change', content: `Client created and linked: ${referral.first_name} ${referral.last_name}` },
-                    }),
-                });
-                router.push(`/clients/${clientId}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data?.error || `Failed to create client (HTTP ${res.status})`);
+                setCreatingClient(false);
+                return;
             }
-        } catch { alert('Error creating client'); }
-        setCreatingClient(false);
+            const clientId = data.client?.id;
+            if (!clientId) {
+                alert('Client was created but no id was returned. Refresh the referral list.');
+                setCreatingClient(false);
+                return;
+            }
+
+            // Best-effort activity log on the referral. Doesn't block navigation
+            // and doesn't matter if it fails.
+            fetch(`/api/referrals/${referralId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    _log_activity: { type: 'status_change', content: `Client created and linked: ${referral.first_name} ${referral.last_name}` },
+                }),
+            }).catch(console.error);
+
+            router.push(`/clients/${clientId}`);
+        } catch (e: any) {
+            alert(`Error creating client: ${e?.message || 'unknown error'}`);
+            setCreatingClient(false);
+        }
     };
 
     const eu = (k: string, v: any) => setEditForm((p: any) => ({ ...p, [k]: v }));

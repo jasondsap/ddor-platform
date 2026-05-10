@@ -1,10 +1,31 @@
+// app/api/reports/route.ts
+//
+// Updated for FGI May 2026 spec.
+//
+// Changes from previous version:
+//   1. household_income and dependents moved out of numeric columns into
+//      report_attributes (EAV). New spec stores these as range strings like
+//      "$0 - 15,000" and "10+", which don't fit the existing numeric columns.
+//   2. Multi-fields are now normalized: API accepts EITHER a single string
+//      (single-select forms) OR a string[] (multi-select forms) for the same
+//      attribute_type, since e.g. employment_status is single-select on 14-Day
+//      and Progress but multi-select on Final.
+//   3. New scalar attributes captured in EAV: enrollment_status, treated_sud,
+//      treated_mh, treatment_start_date, sud_loc_recommended, mh_loc_recommended,
+//      treatment_facility, and the *_other text fields.
+//   4. On 14-Day report submit, treatment_start_date is synced back to the
+//      client record (the form lets providers edit; client.treatment_start_date
+//      is the canonical source for downstream due-date calculations).
+//   5. body.referred_provider (Final spec name) is mapped to the existing
+//      referred_provider_name column.
+
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requireClientAccess, isAdmin, getUserId } from '@/lib/auth';
 import { query, insert, logAuditEvent } from '@/lib/db';
 import { dispatchReportNotification } from '@/lib/email';
 import { REPORT_TYPE_LABELS } from '@/types';
 
-// GET /api/reports
+// GET /api/reports — unchanged
 export async function GET(req: NextRequest) {
     try {
         const session = await requireAuth();
@@ -87,10 +108,8 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'client_id and report_type are required' }, { status: 400 });
         }
 
-        // Verify access to this client
         await requireClientAccess(client_id);
 
-        // Get client's facility info
         const client = await query<any>(
             `SELECT c.facility_id, f.provider_id FROM clients c
              LEFT JOIN facilities f ON c.facility_id = f.id
@@ -102,6 +121,12 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Client not found' }, { status: 404 });
         }
 
+        // ============================================================
+        // Insert the report row (columnar fields)
+        // NOTE: household_income / dependents_count are NOT written here
+        // anymore — new spec uses range strings ($0-15,000 / "10+") that
+        // don't fit numeric columns. They're stored as EAV below.
+        // ============================================================
         const report = await insert('reports', {
             report_type,
             client_id,
@@ -113,14 +138,18 @@ export async function POST(req: NextRequest) {
             current_mh_loc: body.mh_loc || null,
             program_status: body.program_status || null,
             attendance_frequency: body.attendance || null,
-            household_income: body.household_income || null,
-            dependents_count: body.dependents || null,
             is_receiving_mat: body.mat_receiving === 'Yes',
-            was_discharged: body.discharged === 'Yes',
+            // For Final reports, was_discharged is implicit (always true)
+            was_discharged: body.discharged === 'Yes' || report_type === 'final_report',
             discharge_date: body.discharge_date || null,
             discharge_reason: body.discharge_reason || null,
-            was_referred_to_provider: body.referred_to_provider === 'Yes',
-            referred_provider_name: body.referred_provider_name || null,
+            // For Final, presence of any referred-provider value implies referral happened
+            was_referred_to_provider:
+                body.referred_to_provider === 'Yes'
+                || !!body.referred_provider
+                || !!body.referred_provider_name,
+            // Final spec uses body.referred_provider, legacy used body.referred_provider_name
+            referred_provider_name: body.referred_provider_name || body.referred_provider || null,
             referred_loc: body.referred_loc || null,
             kyae_referral_status: body.kyae_referral_status || null,
             kyae_education_status: body.kyae_education_status || null,
@@ -136,50 +165,111 @@ export async function POST(req: NextRequest) {
 
         const reportId = (report as any).id;
 
-        // Store multi-select values as report_attributes
-        const multiFields: [string, string[]][] = [
-            ['living_situation', body.living_situation || []],
-            ['employment_status', body.employment_status || []],
-            ['insurance_type', body.insurance_type || []],
-            ['criminal_justice', body.criminal_justice || []],
-            ['case_mgmt_services', body.case_mgmt_services || []],
-            ['mat_services', body.mat_services || []],
-            ['goals_achieved', body.goals_achieved || []],
-            ['barriers', body.barriers || []],
-            // Service grids
-            ['treatment_provided', body.treatment_provided || []],
-            ['treatment_planned', body.treatment_planned || []],
-            ['case_mgmt_provided', body.case_mgmt_provided || []],
-            ['case_mgmt_planned', body.case_mgmt_planned || []],
-            ['medical_provided', body.medical_provided || []],
-            ['medical_planned', body.medical_planned || []],
-            ['aftercare_provided', body.aftercare_provided || []],
-            ['aftercare_planned', body.aftercare_planned || []],
-            ['educational_provided', body.educational_provided || []],
-            ['educational_planned', body.educational_planned || []],
-            ['recovery_provided', body.recovery_provided || []],
-            ['recovery_planned', body.recovery_planned || []],
+        // ============================================================
+        // SCALAR attributes — single value each, stored in report_attributes
+        // ============================================================
+        const scalarAttrs: Array<[string, any]> = [
+            // Existing
+            ['months_unemployed', body.months_unemployed],
+            ['education_level', body.education_level],
+            // New for May 2026 spec
+            ['enrollment_status', body.enrollment_status],
+            ['treated_sud', body.treated_sud],
+            ['treated_mh', body.treated_mh],
+            ['treatment_start_date', body.treatment_start_date],
+            ['household_income', body.household_income],   // string range now
+            ['dependents', body.dependents],               // string ("10+", etc.)
+            ['sud_loc_recommended', body.sud_loc_recommended],
+            ['mh_loc_recommended', body.mh_loc_recommended],
+            ['treatment_facility', body.treatment_facility],
+            // Other-text fields (only present when parent select === 'Other')
+            ['discharge_reason_other', body.discharge_reason_other],
+            ['goals_achieved_other', body.goals_achieved_other],
+            ['barriers_other', body.barriers_other],
+            ['credential_other', body.credential_other],
+            // Status Change specific (FGI May 2026 spec)
+            ['status_reason', body.status_reason],
+            ['non_compliant_other', body.non_compliant_other],
+            ['additional_info', body.additional_info],
+            ['agency', body.agency],
         ];
 
-        for (const [attrType, values] of multiFields) {
-            for (const val of values) {
+        for (const [key, val] of scalarAttrs) {
+            if (val !== undefined && val !== null && val !== '') {
                 await insert('report_attributes', {
                     report_id: reportId,
-                    attribute_type: attrType,
-                    value: val,
+                    attribute_type: key,
+                    value: String(val),
                 });
             }
         }
 
-        // Store single-value fields that don't have dedicated columns
-        if (body.months_unemployed) {
-            await insert('report_attributes', { report_id: reportId, attribute_type: 'months_unemployed', value: body.months_unemployed });
-        }
-        if (body.education_level) {
-            await insert('report_attributes', { report_id: reportId, attribute_type: 'education_level', value: body.education_level });
+        // ============================================================
+        // MULTI-VALUE attributes — one row per option in report_attributes.
+        // Normalized: accept either string[] or single string. Some fields
+        // (employment_status, goals_achieved, living_situation) are
+        // single-select on some forms and multi-select on others.
+        // ============================================================
+        const multiFields: Array<[string, any]> = [
+            ['living_situation', body.living_situation],
+            ['employment_status', body.employment_status],
+            ['insurance_type', body.insurance_type],
+            ['criminal_justice', body.criminal_justice],
+            ['mat_services', body.mat_services],
+            ['goals_achieved', body.goals_achieved],
+            ['barriers', body.barriers],
+            // Status Change specific (FGI May 2026 spec)
+            ['non_compliant_reasons', body.non_compliant_reasons],
+            // Service grids — provided to date (planned dropped from new forms,
+            // legacy keys retained for any historical data being re-saved)
+            ['treatment_provided', body.treatment_provided],
+            ['treatment_planned', body.treatment_planned],
+            ['case_mgmt_provided', body.case_mgmt_provided],
+            ['case_mgmt_planned', body.case_mgmt_planned],
+            ['medical_provided', body.medical_provided],
+            ['medical_planned', body.medical_planned],
+            ['aftercare_provided', body.aftercare_provided],
+            ['aftercare_planned', body.aftercare_planned],
+            ['educational_provided', body.educational_provided],
+            ['educational_planned', body.educational_planned],
+            ['recovery_provided', body.recovery_provided],
+            ['recovery_planned', body.recovery_planned],
+        ];
+
+        for (const [attrType, raw] of multiFields) {
+            // Normalize to array. Critical: prevents string-iteration bug
+            // where each character would otherwise be inserted as a row.
+            const values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+            for (const val of values) {
+                if (val !== undefined && val !== null && val !== '') {
+                    await insert('report_attributes', {
+                        report_id: reportId,
+                        attribute_type: attrType,
+                        value: String(val),
+                    });
+                }
+            }
         }
 
-        // Update report tracking status
+        // ============================================================
+        // 14-Day side effect: sync edited treatment_start_date back to client
+        // ============================================================
+        if (report_type === 'fourteen_day' && body.treatment_start_date) {
+            try {
+                await query(
+                    `UPDATE clients
+                     SET treatment_start_date = $1::date, updated_at = NOW()
+                     WHERE id = $2`,
+                    [body.treatment_start_date, client_id]
+                );
+            } catch (err) {
+                console.warn('Failed to sync client.treatment_start_date:', err);
+            }
+        }
+
+        // ============================================================
+        // Update report_tracking row for this milestone
+        // ============================================================
         const statusField = getTrackingField(report_type);
         if (statusField) {
             await query(
@@ -188,7 +278,7 @@ export async function POST(req: NextRequest) {
                      ${statusField}_report_id = $1,
                      updated_at = NOW()
                  WHERE client_id = $2`,
-                [(report as any).id, client_id]
+                [reportId, client_id]
             );
         }
 
@@ -196,12 +286,12 @@ export async function POST(req: NextRequest) {
             getUserId(session),
             'create',
             'reports',
-            (report as any).id,
+            reportId,
             undefined,
             { report_type, client_id }
         );
 
-        // Send email notification (non-blocking — don't fail the request if email fails)
+        // Email notification (non-blocking)
         try {
             const clientInfo = await query<any>(
                 `SELECT c.first_name, c.last_name, c.ddor_id,
@@ -224,7 +314,6 @@ export async function POST(req: NextRequest) {
                     submitterName: body.submitter_name || body.staff_name || session.user?.name,
                     submitterEmail: body.submitter_email || body.staff_email || session.user?.email,
                     dateSubmitted: new Date().toLocaleDateString(),
-                    // Extra fields for specific report types
                     statusReason: body.status_reason,
                     dischargeReason: body.discharge_reason,
                     participantAddress: body.participant_address,

@@ -33,11 +33,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             return NextResponse.json({ error: 'Client not found' }, { status: 404 });
         }
 
-        // Get referral info
+        // Get referral info — JOIN counties so the detail page can surface
+        // "Originating County" in the Personal block. (referrals.originating_county_id
+        // is the canonical source; clients table doesn't carry a county column.)
         const referral = await queryOne(
-            `SELECT r.*, cn.first_name || ' ' || cn.last_name AS navigator_name
+            `SELECT r.*,
+                    cn.first_name || ' ' || cn.last_name AS navigator_name,
+                    co.name AS originating_county_name,
+                    co.id AS originating_county_id
              FROM referrals r
              LEFT JOIN users cn ON r.case_navigator_id = cn.id
+             LEFT JOIN counties co ON r.originating_county_id = co.id
              WHERE r.client_id = $1`,
             [params.id]
         );

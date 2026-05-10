@@ -1,3 +1,20 @@
+// app/reports/[id]/page.tsx
+//
+// Updated for FGI May 2026 spec.
+//
+// Handles BOTH legacy reports (pre-spec-update) and new reports written
+// against the new schema. Specifically:
+//   - household_income / dependents read from the EAV attribute (new) OR
+//     the numeric column (legacy). Display formatting differs accordingly.
+//   - employment_status / goals_achieved / living_situation work whether
+//     stored as a single value or as multiple attribute rows.
+//   - The 3 deprecated service categories (medical / aftercare / educational)
+//     and "planned" sub-columns only render if data exists for them.
+//   - New fields (enrollment_status, treated_sud, treated_mh,
+//     treatment_start_date, treatment_facility, sud_loc_recommended,
+//     mh_loc_recommended, *_other text fields) display when present.
+//   - KYAE section already gated on data existence — unchanged.
+//
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -7,7 +24,7 @@ import Header from '@/components/Header';
 import {
     ArrowLeft, Loader2, FileText, User, Stethoscope, Building,
     Calendar, CheckCircle2, Clock, Shield, Briefcase, Heart,
-    Activity, Printer, AlertTriangle
+    Activity, Printer, AlertTriangle, Target,
 } from 'lucide-react';
 import { REPORT_TYPE_LABELS } from '@/types';
 import { generateReportPDF } from '@/lib/generateReportPDF';
@@ -45,6 +62,32 @@ export default function ReportViewPage() {
         return <div className="min-h-screen bg-gray-50"><Header /><div className="text-center py-12"><p className="text-gray-500">Report not found.</p></div></div>;
     }
 
+    // ============================================================
+    // Helpers
+    // ============================================================
+    const firstAttr = (key: string): string | null => attributes[key]?.[0] || null;
+    const allAttr = (key: string): string[] => attributes[key] || [];
+    const hasAttr = (key: string): boolean => (attributes[key]?.length ?? 0) > 0;
+
+    // For values that might be in a column (legacy) or in EAV (new spec).
+    const colOrAttr = (column: string, attrKey: string): string | null => {
+        const colVal = report[column];
+        if (colVal !== null && colVal !== undefined && colVal !== '') return String(colVal);
+        return firstAttr(attrKey);
+    };
+
+    // Income display: numeric (legacy) → "$45,000"; range string (new) → as-is
+    const formatIncome = (val: any): string | null => {
+        if (val === null || val === undefined || val === '') return null;
+        // Range strings or anything containing letters/dashes
+        if (typeof val === 'string' && /[a-zA-Z\-]/.test(val)) return val;
+        const n = typeof val === 'number' ? val : Number(val);
+        return Number.isFinite(n) ? `$${n.toLocaleString()}` : String(val);
+    };
+
+    const incomeRaw = report.household_income ?? firstAttr('household_income');
+    const dependentsRaw = report.dependents_count ?? firstAttr('dependents');
+
     const typeLabel = REPORT_TYPE_LABELS[report.report_type as ReportType] || report.report_type;
     const clientName = `${report.client_first_name} ${report.client_last_name}`;
     const isProgress = ['forty_two_day', 'ninety_day', 'one_eighty_day', 'two_seventy_day', 'three_sixty_day'].includes(report.report_type);
@@ -63,25 +106,32 @@ export default function ReportViewPage() {
                     </button>
                     <div className="flex-1">
                         <h1 className="text-2xl font-bold text-ddor-navy">{typeLabel}</h1>
-                        <p className="text-sm text-gray-500">{clientName} • {report.facility_name || '—'}</p>
+                        <p className="text-sm text-gray-500">{clientName} • {firstAttr('treatment_facility') || report.facility_name || '—'}</p>
                     </div>
                     <div className="flex gap-2">
                         <button onClick={() => generateReportPDF({
                             reportType: report.report_type, reportTypeLabel: typeLabel,
                             clientName, ddorId: report.ddor_id,
                             clientDob: report.client_dob ? new Date(report.client_dob).toLocaleDateString() : undefined,
-                            diagnosis: report.diagnosis, facilityName: report.facility_name, providerName: report.provider_name,
+                            diagnosis: report.diagnosis,
+                            facilityName: firstAttr('treatment_facility') || report.facility_name,
+                            providerName: report.provider_name,
                             dateSubmitted: report.date_submitted ? new Date(report.date_submitted).toLocaleDateString() : undefined,
                             submitterName: report.submitter_name, submitterCredential: report.submitter_credential,
                             signatureDate: report.signature_date ? new Date(report.signature_date).toLocaleDateString() : undefined,
                             isSigned: report.is_signed, sudLoc: report.current_sud_loc, mhLoc: report.current_mh_loc,
                             programStatus: report.program_status, attendance: report.attendance_frequency,
-                            isReceivingMat: report.is_receiving_mat, householdIncome: report.household_income,
-                            dependents: report.dependents_count, wasDischarged: report.was_discharged,
+                            isReceivingMat: report.is_receiving_mat,
+                            householdIncome: formatIncome(incomeRaw),
+                            dependents: dependentsRaw?.toString(),
+                            wasDischarged: report.was_discharged,
                             dischargeDate: report.discharge_date ? new Date(report.discharge_date).toLocaleDateString() : undefined,
-                            dischargeReason: report.discharge_reason, referredProvider: report.referred_provider_name,
-                            referredLoc: report.referred_loc, kyaeReferralStatus: report.kyae_referral_status,
-                            kyaeEducationStatus: report.kyae_education_status, kyaeEmploymentStatus: report.kyae_employment_status,
+                            dischargeReason: report.discharge_reason,
+                            referredProvider: report.referred_provider_name,
+                            referredLoc: report.referred_loc,
+                            kyaeReferralStatus: report.kyae_referral_status,
+                            kyaeEducationStatus: report.kyae_education_status,
+                            kyaeEmploymentStatus: report.kyae_employment_status,
                             barrierNotes: report.barrier_notes, recommendationNotes: report.recommendation_notes,
                             notes: report.notes, attributes,
                         })} className="flex items-center gap-2 px-4 py-2 bg-ddor-blue text-white rounded-lg text-sm font-medium hover:bg-[#156090]">
@@ -106,7 +156,10 @@ export default function ReportViewPage() {
                         <span className="font-medium">{report.submitter_name || `${report.submitter_first || ''} ${report.submitter_last || ''}`.trim() || '—'}</span>
                     </div>
                     {report.submitter_credential && (
-                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full font-medium">{report.submitter_credential}</span>
+                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full font-medium">
+                            {report.submitter_credential}
+                            {firstAttr('credential_other') ? ` (${firstAttr('credential_other')})` : ''}
+                        </span>
                     )}
                     {report.is_signed && (
                         <span className="flex items-center gap-1 text-green-600 text-xs font-medium"><CheckCircle2 className="w-3.5 h-3.5" /> Signed{report.signature_date ? ` ${new Date(report.signature_date).toLocaleDateString()}` : ''}</span>
@@ -122,7 +175,7 @@ export default function ReportViewPage() {
                             <Field label="DOB" value={report.client_dob ? new Date(report.client_dob).toLocaleDateString() : null} />
                             <Field label="Diagnosis" value={report.diagnosis === 'co_occurring' ? 'Co-Occurring' : report.diagnosis?.toUpperCase()} />
                             <Field label="Provider" value={report.provider_name} />
-                            <Field label="Facility" value={report.facility_name} />
+                            <Field label="Facility" value={firstAttr('treatment_facility') || report.facility_name} />
                         </FieldGrid>
                     </Section>
 
@@ -130,30 +183,62 @@ export default function ReportViewPage() {
                     {isReport && (
                         <Section title="Clinical Information" icon={Stethoscope}>
                             <FieldGrid>
-                                <Field label="Current SUD Level of Care" value={report.current_sud_loc} />
-                                <Field label="Current MH Level of Care" value={report.current_mh_loc} />
+                                <Field
+                                    label={isFinal ? 'SUD Level of Care at Discharge' : 'Current SUD Level of Care'}
+                                    value={report.current_sud_loc}
+                                />
+                                <Field
+                                    label={isFinal ? 'MH Level of Care at Discharge' : 'Current MH Level of Care'}
+                                    value={report.current_mh_loc}
+                                />
+                                {/* Recommended LOCs — Final only */}
+                                {isFinal && (
+                                    <>
+                                        <Field label="Recommended SUD LOC upon Discharge" value={firstAttr('sud_loc_recommended')} />
+                                        <Field label="Recommended MH LOC upon Discharge" value={firstAttr('mh_loc_recommended')} />
+                                    </>
+                                )}
                                 <Field label="Program Status" value={report.program_status} />
-                                <Field label="Treatment Attendance" value={report.attendance_frequency} />
+                                <Field
+                                    label={isFinal ? 'Treatment Attendance' : 'Treatment Attendance'}
+                                    value={report.attendance_frequency}
+                                />
                                 <Field label="Receiving MAT" value={report.is_receiving_mat ? 'Yes' : 'No'} />
-                                {report.household_income !== null && <Field label="Household Income" value={`$${report.household_income?.toLocaleString()}`} />}
-                                {report.dependents_count !== null && <Field label="Dependents" value={report.dependents_count?.toString()} />}
+                                {/* 14-Day specific clinical questions */}
+                                {is14Day && (
+                                    <>
+                                        <Field label="Treatment Start Date" value={firstAttr('treatment_start_date') ? new Date(firstAttr('treatment_start_date')!).toLocaleDateString() : null} />
+                                        <Field label="Treated for SUD in past year" value={firstAttr('treated_sud')} />
+                                        <Field label="Treated for MH in past year" value={firstAttr('treated_mh')} />
+                                    </>
+                                )}
+                                {/* Income / dependents — handles both legacy column and new EAV */}
+                                {incomeRaw !== null && incomeRaw !== undefined && (
+                                    <Field label="Annual Household Income" value={formatIncome(incomeRaw)} />
+                                )}
+                                {dependentsRaw !== null && dependentsRaw !== undefined && (
+                                    <Field label="Dependents" value={String(dependentsRaw)} />
+                                )}
                             </FieldGrid>
                         </Section>
                     )}
 
-                    {/* Participant Status (multi-select attributes) */}
-                    {(attributes.living_situation?.length > 0 || attributes.employment_status?.length > 0 || attributes.insurance_type?.length > 0) && (
+                    {/* Participant Status (multi-select EAV attributes) */}
+                    {(hasAttr('living_situation') || hasAttr('employment_status') || hasAttr('insurance_type')
+                        || hasAttr('criminal_justice') || hasAttr('months_unemployed') || hasAttr('education_level')
+                        || hasAttr('enrollment_status')) && (
                         <Section title="Participant Status" icon={Building}>
-                            <TagGroup label="Living Situation" tags={attributes.living_situation} />
-                            <TagGroup label="Employment Status" tags={attributes.employment_status} />
-                            <TagGroup label="Insurance" tags={attributes.insurance_type} />
-                            {attributes.months_unemployed && <Field label="Months Unemployed (past 12)" value={attributes.months_unemployed?.[0]} />}
-                            {attributes.education_level && <Field label="Education Level" value={attributes.education_level?.[0]} />}
-                            <TagGroup label="Criminal Justice Involvement" tags={attributes.criminal_justice} />
+                            <TagGroup label="Living Situation" tags={allAttr('living_situation')} />
+                            <TagGroup label="Employment Status" tags={allAttr('employment_status')} />
+                            <Field label="Education Enrollment Status" value={firstAttr('enrollment_status')} />
+                            <TagGroup label="Insurance" tags={allAttr('insurance_type')} />
+                            <Field label="Months Unemployed (past 12)" value={firstAttr('months_unemployed')} />
+                            <Field label="Education Level" value={firstAttr('education_level')} />
+                            <TagGroup label="Criminal Justice Involvement" tags={allAttr('criminal_justice')} />
                         </Section>
                     )}
 
-                    {/* KYAE */}
+                    {/* KYAE — only renders for legacy reports that captured it */}
                     {(report.kyae_referral_status || report.kyae_education_status || report.kyae_employment_status) && (
                         <Section title="KYAE Education & Employment" icon={Briefcase}>
                             <FieldGrid>
@@ -169,14 +254,22 @@ export default function ReportViewPage() {
                         <Section title="Services" icon={Heart}>
                             <ServiceGrid label="Treatment Services" provided={attributes.treatment_provided} planned={attributes.treatment_planned} />
                             <ServiceGrid label="Case Management" provided={attributes.case_mgmt_provided} planned={attributes.case_mgmt_planned} />
+                            <ServiceGrid label="Recovery Support" provided={attributes.recovery_provided} planned={attributes.recovery_planned} />
+                            {/* Legacy categories — only shown if historical data exists */}
                             <ServiceGrid label="Medical Services" provided={attributes.medical_provided} planned={attributes.medical_planned} />
                             <ServiceGrid label="Aftercare" provided={attributes.aftercare_provided} planned={attributes.aftercare_planned} />
                             <ServiceGrid label="Educational/Vocational" provided={attributes.educational_provided} planned={attributes.educational_planned} />
-                            <ServiceGrid label="Recovery Support" provided={attributes.recovery_provided} planned={attributes.recovery_planned} />
                         </Section>
                     )}
 
-                    {/* Discharge — Final Report */}
+                    {/* MAT Services */}
+                    {hasAttr('mat_services') && (
+                        <Section title="MAT Services" icon={Shield}>
+                            <TagGroup label="Medications/Services" tags={allAttr('mat_services')} />
+                        </Section>
+                    )}
+
+                    {/* Discharge — Final Report (or any report flagged as discharged) */}
                     {(report.was_discharged || isFinal) && (
                         <Section title="Discharge & Referral" icon={Shield}>
                             <FieldGrid>
@@ -187,18 +280,50 @@ export default function ReportViewPage() {
                                 <Field label="Referred Provider" value={report.referred_provider_name} />
                                 <Field label="Referred LOC" value={report.referred_loc} />
                             </FieldGrid>
-                            <TagGroup label="Goals Achieved" tags={attributes.goals_achieved} />
-                            <TagGroup label="Barriers to Treatment" tags={attributes.barriers} />
+                            {firstAttr('discharge_reason_other') && (
+                                <NoteBlock label="Discharge Reason — Other" value={firstAttr('discharge_reason_other')!} />
+                            )}
+                        </Section>
+                    )}
+
+                    {/* Goals & Barriers */}
+                    {(hasAttr('goals_achieved') || hasAttr('barriers') || firstAttr('goals_achieved_other') || firstAttr('barriers_other')) && (
+                        <Section title="Goals & Barriers" icon={Target}>
+                            <TagGroup label="Goals Achieved" tags={allAttr('goals_achieved')} />
+                            {firstAttr('goals_achieved_other') && (
+                                <NoteBlock label="Goals Achieved — Other" value={firstAttr('goals_achieved_other')!} />
+                            )}
+                            <TagGroup label="Barriers to Treatment" tags={allAttr('barriers')} />
+                            {firstAttr('barriers_other') && (
+                                <NoteBlock label="Barriers — Other" value={firstAttr('barriers_other')!} />
+                            )}
                         </Section>
                     )}
 
                     {/* Status Change specific */}
                     {report.report_type === 'status_change' && (
                         <Section title="Status Change" icon={AlertTriangle}>
-                            <TagGroup label="Status Reason" tags={attributes.status_reason} />
-                            <TagGroup label="Discharge Reason" tags={attributes.discharge_reason} />
-                            <TagGroup label="Non-Compliant Reasons" tags={attributes.non_compliant_reasons} />
-                            {attributes.other_reasons && <Field label="Other Reasons" value={attributes.other_reasons?.[0]} />}
+                            {/* status_reason is single-select but stored in EAV — TagGroup with one tag is fine */}
+                            <TagGroup label="Status Reason" tags={allAttr('status_reason')} />
+                            {/* discharge_reason is column-mapped, not EAV. Read from report.* */}
+                            <Field label="Discharge Reason" value={report.discharge_reason} />
+                            {hasAttr('discharge_reason_other') && (
+                                <Field label="Discharge Reason — Other" value={firstAttr('discharge_reason_other')} />
+                            )}
+                            <TagGroup label="Non-Compliant Reasons" tags={allAttr('non_compliant_reasons')} />
+                            {/* New name is non_compliant_other; legacy reports stored as other_reasons */}
+                            {(hasAttr('non_compliant_other') || hasAttr('other_reasons')) && (
+                                <Field
+                                    label="Non-Compliant — Other"
+                                    value={firstAttr('non_compliant_other') || firstAttr('other_reasons')}
+                                />
+                            )}
+                            {hasAttr('additional_info') && (
+                                <NoteBlock label="Additional Information" value={firstAttr('additional_info')!} />
+                            )}
+                            {hasAttr('agency') && (
+                                <Field label="Agency" value={firstAttr('agency')} />
+                            )}
                         </Section>
                     )}
 
@@ -206,11 +331,11 @@ export default function ReportViewPage() {
                     {report.report_type === 'initiation_notification' && (
                         <Section title="Initiation Details" icon={Activity}>
                             <FieldGrid>
-                                <Field label="Action" value={attributes.participant_action?.[0] === 'initiated_treatment' ? 'Initiated Treatment' : 'Scheduled Appointment'} />
-                                <Field label="Treatment Date" value={attributes.treatment_initiation_date?.[0]} />
-                                <Field label="Scheduled Date" value={attributes.scheduled_date?.[0]} />
-                                <Field label="Level of Care" value={attributes.level_of_care?.[0]} />
-                                <Field label="Facility/County" value={attributes.facility_county?.[0]} />
+                                <Field label="Action" value={firstAttr('participant_action') === 'initiated_treatment' ? 'Initiated Treatment' : 'Scheduled Appointment'} />
+                                <Field label="Treatment Date" value={firstAttr('treatment_initiation_date')} />
+                                <Field label="Scheduled Date" value={firstAttr('scheduled_date')} />
+                                <Field label="Level of Care" value={firstAttr('level_of_care')} />
+                                <Field label="Facility/County" value={firstAttr('facility_county')} />
                             </FieldGrid>
                         </Section>
                     )}
@@ -218,7 +343,7 @@ export default function ReportViewPage() {
                     {/* Notes */}
                     {(report.notes || report.barrier_notes || report.recommendation_notes) && (
                         <Section title="Notes & Recommendations" icon={FileText}>
-                            {report.barrier_notes && <NoteBlock label="Living Expenses / Barriers" value={report.barrier_notes} />}
+                            {report.barrier_notes && <NoteBlock label="Barriers Note" value={report.barrier_notes} />}
                             {report.recommendation_notes && <NoteBlock label="Recommendations" value={report.recommendation_notes} />}
                             {report.notes && <NoteBlock label="Additional Notes" value={report.notes} />}
                         </Section>
@@ -234,6 +359,7 @@ export default function ReportViewPage() {
                                     <p className="text-sm text-gray-500">
                                         {report.submitter_name || '—'}
                                         {report.submitter_credential ? `, ${report.submitter_credential}` : ''}
+                                        {firstAttr('credential_other') ? ` (${firstAttr('credential_other')})` : ''}
                                         {report.signature_date ? ` — ${new Date(report.signature_date).toLocaleDateString()}` : ''}
                                     </p>
                                 </div>
@@ -275,12 +401,12 @@ function FieldGrid({ children }: { children: React.ReactNode }) {
     return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">{children}</div>;
 }
 
-function Field({ label, value }: { label: string; value: string | null | undefined }) {
-    if (!value) return null;
+function Field({ label, value }: { label: string; value: string | number | null | undefined }) {
+    if (value === null || value === undefined || value === '') return null;
     return (
         <div>
             <p className="text-xs text-gray-500 mb-0.5">{label}</p>
-            <p className="text-sm font-medium text-gray-900">{value}</p>
+            <p className="text-sm font-medium text-gray-900">{String(value)}</p>
         </div>
     );
 }
@@ -308,36 +434,50 @@ function NoteBlock({ label, value }: { label: string; value: string }) {
     );
 }
 
+// ServiceGrid — hides the "Plans to Provide" column when there's no planned data
+// (new reports never have planned data; legacy reports might).
 function ServiceGrid({ label, provided, planned }: { label: string; provided?: string[]; planned?: string[] }) {
-    if ((!provided || provided.length === 0) && (!planned || planned.length === 0)) return null;
+    const hasProvided = provided && provided.length > 0;
+    const hasPlanned = planned && planned.length > 0;
+    if (!hasProvided && !hasPlanned) return null;
+
     return (
         <div className="mb-4 pb-4 border-b border-gray-100 last:border-0">
             <p className="text-sm font-medium text-ddor-navy mb-2">{label}</p>
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <p className="text-xs text-gray-400 mb-1">Provided to Date</p>
-                    {provided && provided.length > 0 ? (
+            {hasPlanned ? (
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <p className="text-xs text-gray-400 mb-1">Provided to Date</p>
+                        {hasProvided ? (
+                            <div className="flex flex-wrap gap-1">
+                                {provided!.map(s => <span key={s} className="px-2 py-0.5 bg-green-50 text-green-700 rounded text-xs">{s}</span>)}
+                            </div>
+                        ) : <span className="text-xs text-gray-300">None</span>}
+                    </div>
+                    <div>
+                        <p className="text-xs text-gray-400 mb-1">Plans to Provide</p>
                         <div className="flex flex-wrap gap-1">
-                            {provided.map(s => <span key={s} className="px-2 py-0.5 bg-green-50 text-green-700 rounded text-xs">{s}</span>)}
+                            {planned!.map(s => <span key={s} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">{s}</span>)}
                         </div>
-                    ) : <span className="text-xs text-gray-300">None</span>}
+                    </div>
                 </div>
-                <div>
-                    <p className="text-xs text-gray-400 mb-1">Plans to Provide</p>
-                    {planned && planned.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                            {planned.map(s => <span key={s} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">{s}</span>)}
-                        </div>
-                    ) : <span className="text-xs text-gray-300">None</span>}
+            ) : (
+                <div className="flex flex-wrap gap-1">
+                    {provided!.map(s => <span key={s} className="px-2 py-0.5 bg-green-50 text-green-700 rounded text-xs">{s}</span>)}
                 </div>
-            </div>
+            )}
         </div>
     );
 }
 
 function hasServiceData(attrs: Record<string, string[]>): boolean {
-    const serviceKeys = ['treatment_provided', 'treatment_planned', 'case_mgmt_provided', 'case_mgmt_planned',
-        'medical_provided', 'medical_planned', 'aftercare_provided', 'aftercare_planned',
-        'educational_provided', 'educational_planned', 'recovery_provided', 'recovery_planned'];
-    return serviceKeys.some(k => attrs[k]?.length > 0);
+    const serviceKeys = [
+        'treatment_provided', 'treatment_planned',
+        'case_mgmt_provided', 'case_mgmt_planned',
+        'medical_provided', 'medical_planned',
+        'aftercare_provided', 'aftercare_planned',
+        'educational_provided', 'educational_planned',
+        'recovery_provided', 'recovery_planned',
+    ];
+    return serviceKeys.some(k => (attrs[k]?.length ?? 0) > 0);
 }
