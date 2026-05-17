@@ -81,6 +81,33 @@ function ClientDetailInner() {
             setDemoInviteSending(null);
         }
     };
+
+    // Assessment invitation send state (Communication tab)
+    const [assessmentType, setAssessmentType] = useState<'barc_10' | 'phq9_gad7'>('barc_10');
+    const [assessSending, setAssessSending] = useState<'email' | 'sms' | null>(null);
+    const [assessMsg, setAssessMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+
+    const sendAssessmentInvite = async (channel: 'email' | 'sms') => {
+        setAssessSending(channel);
+        setAssessMsg(null);
+        try {
+            const res = await fetch(`/api/clients/${clientId}/assessment/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channel, questionnaire_type: assessmentType }),
+            });
+            const data = await res.json();
+            if (!res.ok || data.success === false) {
+                setAssessMsg({ kind: 'error', text: data.message || data.error || 'Send failed.' });
+            } else {
+                setAssessMsg({ kind: 'success', text: data.message || 'Sent.' });
+            }
+        } catch {
+            setAssessMsg({ kind: 'error', text: 'Network error. Please try again.' });
+        } finally {
+            setAssessSending(null);
+        }
+    };
     useEffect(() => {
         if (deepLinkNoteId && clientNotes.some(n => n.id === deepLinkNoteId)) {
             setHighlightedNoteId(deepLinkNoteId);
@@ -544,6 +571,57 @@ function ClientDetailInner() {
                                             : 'bg-red-50 border border-red-200 text-red-700'
                                     }`}>
                                         {demoInviteMsg.text}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-green-500">
+                                <div className="flex items-start justify-between gap-4 flex-wrap">
+                                    <div className="min-w-0 flex-1">
+                                        <h3 className="font-semibold text-ddor-navy text-sm mb-1">Send Assessment Link</h3>
+                                        <p className="text-xs text-gray-500 mb-3">
+                                            Sends a tokenized link so the participant can complete an assessment on
+                                            their own. Link expires in 7 days.
+                                        </p>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Assessment</label>
+                                        <select
+                                            value={assessmentType}
+                                            onChange={e => setAssessmentType(e.target.value as 'barc_10' | 'phq9_gad7')}
+                                            className="w-full max-w-xs p-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                        >
+                                            <option value="barc_10">BARC-10 (Recovery Capital)</option>
+                                            <option value="phq9_gad7">PHQ-9 + GAD-7 (Depression / Anxiety)</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex gap-2 flex-shrink-0">
+                                        <button
+                                            type="button"
+                                            disabled={!client.email || assessSending !== null}
+                                            onClick={() => sendAssessmentInvite('email')}
+                                            className="px-3 py-2 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-40 flex items-center gap-1"
+                                            title={!client.email ? 'No email address on file' : ''}
+                                        >
+                                            <Mail className="w-3.5 h-3.5" />
+                                            {assessSending === 'email' ? 'Sending…' : 'Send by Email'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={!client.phone || assessSending !== null}
+                                            onClick={() => sendAssessmentInvite('sms')}
+                                            className="px-3 py-2 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-40 flex items-center gap-1"
+                                            title={!client.phone ? 'No phone number on file' : ''}
+                                        >
+                                            <Phone className="w-3.5 h-3.5" />
+                                            {assessSending === 'sms' ? 'Sending…' : 'Send by Text'}
+                                        </button>
+                                    </div>
+                                </div>
+                                {assessMsg && (
+                                    <div className={`mt-3 p-2.5 rounded-lg text-xs ${
+                                        assessMsg.kind === 'success'
+                                            ? 'bg-green-50 border border-green-200 text-green-700'
+                                            : 'bg-red-50 border border-red-200 text-red-700'
+                                    }`}>
+                                        {assessMsg.text}
                                     </div>
                                 )}
                             </div>

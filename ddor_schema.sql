@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict Ebuf7HUp4D8GnD2dDlUdfI36ICfUNqe6XWdXdBSn3arMTgPMdHfGZS5X8ysUXe0
+\restrict yNAxpKZPXWj8nocV1cbN0GfbneuPMd58cNbF5YOtidhZkVFUfjerhcCQglStGci
 
 -- Dumped from database version 17.8 (9c8634e)
 -- Dumped by pg_dump version 17.6
@@ -702,7 +702,12 @@ CREATE TABLE public.assessment_invitations (
     total_score numeric,
     client_first_name text NOT NULL,
     client_facility_name text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    send_provider_message_id text,
+    send_status text,
+    send_error text,
+    response_ip text,
+    response_user_agent text
 );
 
 
@@ -3957,5 +3962,5 @@ ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict Ebuf7HUp4D8GnD2dDlUdfI36ICfUNqe6XWdXdBSn3arMTgPMdHfGZS5X8ysUXe0
+\unrestrict yNAxpKZPXWj8nocV1cbN0GfbneuPMd58cNbF5YOtidhZkVFUfjerhcCQglStGci
 
