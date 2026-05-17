@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 2xCYes39KpruHbDJJKu5A2d3z3fuhatjDyl1flHVPqeO8dhHZNYihzcajXlfm6Z
+\restrict Ebuf7HUp4D8GnD2dDlUdfI36ICfUNqe6XWdXdBSn3arMTgPMdHfGZS5X8ysUXe0
 
 -- Dumped from database version 17.8 (9c8634e)
 -- Dumped by pg_dump version 17.6
@@ -958,6 +958,26 @@ CREATE TABLE public.clients (
     sms_consent_status character varying(20) DEFAULT 'not_requested'::character varying NOT NULL,
     sms_consent_granted_at timestamp with time zone,
     sms_consent_revoked_at timestamp with time zone,
+    nickname text,
+    race_ethnicity text,
+    race_other text,
+    veteran text,
+    street_address text,
+    apt_suite text,
+    city text,
+    county text,
+    has_alternate_phone boolean DEFAULT false NOT NULL,
+    phone_alternate text,
+    preferred_contact text,
+    emergency_name text,
+    emergency_phone text,
+    emergency_relation text,
+    employment_status text,
+    education_level text,
+    enrollment_status text,
+    insurance_type text,
+    insurance_id text,
+    living_situation text,
     CONSTRAINT clients_email_consent_status_check CHECK (((email_consent_status)::text = ANY ((ARRAY['not_requested'::character varying, 'pending'::character varying, 'granted'::character varying, 'declined'::character varying, 'revoked'::character varying, 'expired'::character varying])::text[]))),
     CONSTRAINT clients_sms_consent_status_check CHECK (((sms_consent_status)::text = ANY ((ARRAY['not_requested'::character varying, 'pending'::character varying, 'granted'::character varying, 'declined'::character varying, 'revoked'::character varying, 'expired'::character varying])::text[])))
 );
@@ -1024,6 +1044,32 @@ CREATE TABLE public.counties (
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: demographic_invitations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.demographic_invitations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    client_id uuid NOT NULL,
+    token text NOT NULL,
+    channel text NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    recipient_address text NOT NULL,
+    sent_at timestamp with time zone,
+    send_provider_message_id text,
+    send_status text,
+    send_error text,
+    completed_at timestamp with time zone,
+    response_ip text,
+    response_user_agent text,
+    expires_at timestamp with time zone DEFAULT (now() + '30 days'::interval) NOT NULL,
+    sent_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT demographic_invitations_channel_check CHECK ((channel = ANY (ARRAY['email'::text, 'sms'::text]))),
+    CONSTRAINT demographic_invitations_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'completed'::text, 'expired'::text, 'superseded'::text])))
 );
 
 
@@ -2069,6 +2115,22 @@ ALTER TABLE ONLY public.counties
 
 
 --
+-- Name: demographic_invitations demographic_invitations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.demographic_invitations
+    ADD CONSTRAINT demographic_invitations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: demographic_invitations demographic_invitations_token_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.demographic_invitations
+    ADD CONSTRAINT demographic_invitations_token_key UNIQUE (token);
+
+
+--
 -- Name: email_log email_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2641,6 +2703,20 @@ CREATE INDEX idx_counties_name ON public.counties USING btree (name);
 --
 
 CREATE INDEX idx_counties_pilot ON public.counties USING btree (is_pilot) WHERE (is_pilot = true);
+
+
+--
+-- Name: idx_demographic_invitations_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_demographic_invitations_client ON public.demographic_invitations USING btree (client_id);
+
+
+--
+-- Name: idx_demographic_invitations_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_demographic_invitations_status ON public.demographic_invitations USING btree (status);
 
 
 --
@@ -3298,6 +3374,22 @@ ALTER TABLE ONLY public.consent_records
 
 
 --
+-- Name: demographic_invitations demographic_invitations_client_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.demographic_invitations
+    ADD CONSTRAINT demographic_invitations_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.clients(id) ON DELETE CASCADE;
+
+
+--
+-- Name: demographic_invitations demographic_invitations_sent_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.demographic_invitations
+    ADD CONSTRAINT demographic_invitations_sent_by_fkey FOREIGN KEY (sent_by) REFERENCES public.users(id);
+
+
+--
 -- Name: email_log email_log_recipient_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3865,5 +3957,5 @@ ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 2xCYes39KpruHbDJJKu5A2d3z3fuhatjDyl1flHVPqeO8dhHZNYihzcajXlfm6Z
+\unrestrict Ebuf7HUp4D8GnD2dDlUdfI36ICfUNqe6XWdXdBSn3arMTgPMdHfGZS5X8ysUXe0
 

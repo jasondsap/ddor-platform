@@ -62,8 +62,9 @@ function DemographicContent() {
         phone_primary: '', has_alternate_phone: 'No', phone_alternate: '', email: '',
         emergency_name: '', emergency_phone: '', emergency_relation: '',
         preferred_contact: '',
-        living_situation: '', employment: '', education: '', enrollment: '',
-        insurance: '', insurance_id: '',
+        living_situation: '',
+        employment_status: '', education_level: '', enrollment_status: '',
+        insurance_type: '', insurance_id: '',
         treated_sud: '', treated_mh: '',
         date_submitted: new Date().toISOString().split('T')[0],
     });
@@ -191,10 +192,10 @@ function DemographicContent() {
                     <h2 className="font-semibold text-ddor-navy flex items-center gap-2 mb-4"><Shield className="w-5 h-5 text-ddor-blue" /> Current Status</h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Sel label="Living Situation" value={form.living_situation} onChange={v => u('living_situation', v)} options={LIVING_SITUATION} />
-                        <Sel label="Employment Status" value={form.employment} onChange={v => u('employment', v)} options={EMPLOYMENT} />
-                        <Sel label="Highest Education" value={form.education} onChange={v => u('education', v)} options={EDUCATION} />
-                        <Sel label="School Enrollment" value={form.enrollment} onChange={v => u('enrollment', v)} options={ENROLLMENT} />
-                        <Sel label="Insurance" value={form.insurance} onChange={v => u('insurance', v)} options={INSURANCE} />
+                        <Sel label="Employment Status" value={form.employment_status} onChange={v => u('employment_status', v)} options={EMPLOYMENT} />
+                        <Sel label="Highest Education" value={form.education_level} onChange={v => u('education_level', v)} options={EDUCATION} />
+                        <Sel label="School Enrollment" value={form.enrollment_status} onChange={v => u('enrollment_status', v)} options={ENROLLMENT} />
+                        <Sel label="Insurance" value={form.insurance_type} onChange={v => u('insurance_type', v)} options={INSURANCE} />
                         <Inp label="Insurance Policy ID" value={form.insurance_id} onChange={v => u('insurance_id', v)} />
                         <Sel label="Treated for SUD in Last Year" value={form.treated_sud} onChange={v => u('treated_sud', v)} options={['Yes', 'No', 'Unknown']} />
                         <Sel label="Treated for MH in Last Year" value={form.treated_mh} onChange={v => u('treated_mh', v)} options={['Yes', 'No', 'Unknown']} />

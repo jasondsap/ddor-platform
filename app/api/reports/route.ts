@@ -24,6 +24,7 @@ import { requireAuth, requireClientAccess, isAdmin, getUserId } from '@/lib/auth
 import { query, insert, logAuditEvent } from '@/lib/db';
 import { dispatchReportNotification } from '@/lib/email';
 import { REPORT_TYPE_LABELS } from '@/types';
+import { applyDemographicReport } from '@/lib/demographic-report';
 
 // GET /api/reports — unchanged
 export async function GET(req: NextRequest) {
@@ -164,6 +165,32 @@ export async function POST(req: NextRequest) {
         });
 
         const reportId = (report as any).id;
+
+        // ============================================================
+        // Demographic reports take a different path (Option C):
+        //   - Snapshot all form fields to report_attributes
+        //   - Sync the demographic columns onto clients
+        // Skip the SUD-progress scalar/multi blocks below; those are for
+        // 14-day / 42-day / 90-day / 180-day / 270-day / 360-day / final.
+        // ============================================================
+        if (report_type === 'demographic') {
+            await applyDemographicReport({
+                reportId,
+                clientId: client_id,
+                body,
+            });
+
+            await logAuditEvent(
+                getUserId(session),
+                'create',
+                'reports',
+                reportId,
+                undefined,
+                { report_type: 'demographic', client_id }
+            );
+
+            return NextResponse.json({ success: true, report });
+        }
 
         // ============================================================
         // SCALAR attributes — single value each, stored in report_attributes

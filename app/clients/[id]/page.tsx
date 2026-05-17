@@ -55,6 +55,32 @@ function ClientDetailInner() {
 
     // Highlight a deep-linked note for 2s. Cleared after.
     const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(null);
+
+    // Demographic-update invitation send state (Communication tab affordance)
+    const [demoInviteSending, setDemoInviteSending] = useState<'email' | 'sms' | null>(null);
+    const [demoInviteMsg, setDemoInviteMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+
+    const sendDemographicInvite = async (channel: 'email' | 'sms') => {
+        setDemoInviteSending(channel);
+        setDemoInviteMsg(null);
+        try {
+            const res = await fetch(`/api/clients/${clientId}/demographic/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channel }),
+            });
+            const data = await res.json();
+            if (!res.ok || data.success === false) {
+                setDemoInviteMsg({ kind: 'error', text: data.message || data.error || 'Send failed.' });
+            } else {
+                setDemoInviteMsg({ kind: 'success', text: data.message || 'Sent.' });
+            }
+        } catch (e) {
+            setDemoInviteMsg({ kind: 'error', text: 'Network error. Please try again.' });
+        } finally {
+            setDemoInviteSending(null);
+        }
+    };
     useEffect(() => {
         if (deepLinkNoteId && clientNotes.some(n => n.id === deepLinkNoteId)) {
             setHighlightedNoteId(deepLinkNoteId);
@@ -478,6 +504,49 @@ function ClientDetailInner() {
                         )}
                         {/* COMMUNICATION */}
                         {active === 'communication' && (
+                            <div className="space-y-4">
+                            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-ddor-blue">
+                                <div className="flex items-start justify-between gap-4 flex-wrap">
+                                    <div>
+                                        <h3 className="font-semibold text-ddor-navy text-sm mb-1">Send Demographic Update Link</h3>
+                                        <p className="text-xs text-gray-500">
+                                            Sends a tokenized link to the participant so they can review and update
+                                            their own information. Link expires in 30 days.
+                                        </p>
+                                    </div>
+                                    <div className="flex gap-2 flex-shrink-0">
+                                        <button
+                                            type="button"
+                                            disabled={!client.email || demoInviteSending !== null}
+                                            onClick={() => sendDemographicInvite('email')}
+                                            className="px-3 py-2 bg-ddor-blue text-white rounded-lg text-xs font-medium hover:bg-[#156090] disabled:opacity-40 flex items-center gap-1"
+                                            title={!client.email ? 'No email address on file' : ''}
+                                        >
+                                            <Mail className="w-3.5 h-3.5" />
+                                            {demoInviteSending === 'email' ? 'Sending…' : 'Send by Email'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={!client.phone || demoInviteSending !== null}
+                                            onClick={() => sendDemographicInvite('sms')}
+                                            className="px-3 py-2 bg-ddor-blue text-white rounded-lg text-xs font-medium hover:bg-[#156090] disabled:opacity-40 flex items-center gap-1"
+                                            title={!client.phone ? 'No phone number on file' : ''}
+                                        >
+                                            <Phone className="w-3.5 h-3.5" />
+                                            {demoInviteSending === 'sms' ? 'Sending…' : 'Send by Text'}
+                                        </button>
+                                    </div>
+                                </div>
+                                {demoInviteMsg && (
+                                    <div className={`mt-3 p-2.5 rounded-lg text-xs ${
+                                        demoInviteMsg.kind === 'success'
+                                            ? 'bg-green-50 border border-green-200 text-green-700'
+                                            : 'bg-red-50 border border-red-200 text-red-700'
+                                    }`}>
+                                        {demoInviteMsg.text}
+                                    </div>
+                                )}
+                            </div>
                             <ConsentSection
                                 clientId={clientId}
                                 hasEmail={!!client.email}
@@ -500,6 +569,7 @@ function ClientDetailInner() {
                                         });
                                 }}
                             />
+                            </div>
                         )}
 
                         {/* REFERRAL */}
