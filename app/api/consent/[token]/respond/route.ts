@@ -24,7 +24,6 @@ function getClientIp(req: NextRequest): string | null {
   }
   const realIp = req.headers.get('x-real-ip');
   if (realIp) return realIp;
-  // @ts-expect-error - .ip exists at runtime on Vercel/Amplify
   return req.ip ?? null;
 }
 

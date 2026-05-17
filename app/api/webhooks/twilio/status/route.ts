@@ -23,9 +23,9 @@ export const runtime = 'nodejs';
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const params: Record<string, string> = {};
-  for (const [key, value] of formData.entries()) {
+  formData.forEach((value, key) => {
     params[key] = typeof value === 'string' ? value : '';
-  }
+  });
 
   const signature = req.headers.get('x-twilio-signature');
   const url =

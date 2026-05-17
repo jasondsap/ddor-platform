@@ -43,9 +43,9 @@ export async function POST(req: NextRequest) {
   // Twilio sends application/x-www-form-urlencoded
   const formData = await req.formData();
   const params: Record<string, string> = {};
-  for (const [key, value] of formData.entries()) {
+  formData.forEach((value, key) => {
     params[key] = typeof value === 'string' ? value : '';
-  }
+  });
 
   // ---- Signature validation --------------------------------------------------
   const signature = req.headers.get('x-twilio-signature');
