@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
@@ -9,6 +9,8 @@ import {
     Hash, Users, User, Clock, Building,
     Bell, AtSign, UserPlus, Mail
 } from 'lucide-react';
+import { MentionTextarea } from '@/components/MentionTextarea';
+import { parseMentions, renderMentions, type MentionSuggestion } from '@/lib/mentions';
 
 export default function MessagesPage() {
     const router = useRouter();
@@ -30,10 +32,7 @@ export default function MessagesPage() {
     const [showNewDM, setShowNewDM] = useState(false);
     const [newChannelName, setNewChannelName] = useState('');
     const [search, setSearch] = useState('');
-    const [showMentions, setShowMentions] = useState(false);
-    const [mentionSearch, setMentionSearch] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const inputRef = useRef<HTMLTextAreaElement>(null);
     const pollRef = useRef<any>(null);
 
     useEffect(() => {
@@ -85,13 +84,7 @@ export default function MessagesPage() {
         if (!newMessage.trim() || !activeChannel) return;
         setSending(true);
 
-        // Parse mentions: @[Name](type:id)
-        const mentionRegex = /@\[([^\]]+)\]\(([^:]+):([^)]+)\)/g;
-        const mentions: any[] = [];
-        let match;
-        while ((match = mentionRegex.exec(newMessage)) !== null) {
-            mentions.push({ type: match[2], name: match[1], id: match[3] });
-        }
+        const mentions = parseMentions(newMessage);
 
         await fetch(`/api/channels/${activeChannel}/messages`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -116,58 +109,32 @@ export default function MessagesPage() {
         fetchChannels();
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-        if (e.key === 'Escape' && showMentions) setShowMentions(false);
     };
 
-    const insertMention = (item: { name: string; id: string; type: string }) => {
-        // Remove the partial @ text, insert formatted mention
-        const val = newMessage;
-        const lastAt = val.lastIndexOf('@');
-        const before = lastAt >= 0 ? val.substring(0, lastAt) : val;
-        const mention = `@[${item.name}](${item.type}:${item.id})`;
-        setNewMessage(before + mention + ' ');
-        setShowMentions(false);
-        inputRef.current?.focus();
-    };
-
-    const handleInputChange = (val: string) => {
-        setNewMessage(val);
-        const lastAt = val.lastIndexOf('@');
-        if (lastAt >= 0) {
-            const afterAt = val.substring(lastAt + 1);
-            if (!afterAt.includes(' ') && !afterAt.includes('\n') && afterAt.length < 30) {
-                setShowMentions(true);
-                setMentionSearch(afterAt);
-            } else {
-                setShowMentions(false);
-            }
-        }
-    };
-
-    const renderMessage = (body: string) => {
-        // Convert @[Name](type:id) to clickable links
-        return body.replace(/@\[([^\]]+)\]\(([^:]+):([^)]+)\)/g, (_, name, type, id) => {
-            const href = type === 'client' ? `/clients/${id}` : type === 'user' ? '#' : '#';
-            const color = type === 'user' ? 'color:#8B5CF6' : 'color:#1A73A8';
-            return `<a href="${href}" style="${color};font-weight:500;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">@${name}</a>`;
-        });
-    };
-
-    // Build mention suggestions: users first, then clients
-    const mentionSuggestions = [
-        ...allUsers.filter(u => u.id !== currentUserId).map(u => ({
-            name: `${u.first_name} ${u.last_name}`, id: u.id, type: 'user',
-            subtitle: u.role?.replace('_', ' ') || '', icon: '👤',
-        })),
-        ...clients.map(c => ({
-            name: `${c.first_name} ${c.last_name}`, id: c.id, type: 'client',
-            subtitle: c.ddor_id ? `#${c.ddor_id}` : 'Participant', icon: '📋',
-        })),
-    ].filter(item =>
-        !mentionSearch || item.name.toLowerCase().includes(mentionSearch.toLowerCase())
-    ).slice(0, 10);
+    // Mention suggestions for messages: every active user (except self) + every client
+    // the current session can see. No access-filter beyond that today — matches the
+    // pre-extraction behavior. Memoized so MentionTextarea's effect doesn't refire
+    // on every keystroke against an inline function identity.
+    const getMessageSuggestions = useCallback(async (query: string): Promise<MentionSuggestion[]> => {
+        const items: MentionSuggestion[] = [
+            ...allUsers.filter(u => u.id !== currentUserId).map(u => ({
+                name: `${u.first_name} ${u.last_name}`,
+                id: u.id,
+                type: 'user' as const,
+                subtitle: u.role?.replace('_', ' ') || '',
+            })),
+            ...clients.map((c: any) => ({
+                name: `${c.first_name} ${c.last_name}`,
+                id: c.id,
+                type: 'client' as const,
+                subtitle: c.ddor_id ? `#${c.ddor_id}` : 'Participant',
+            })),
+        ];
+        const q = query.toLowerCase();
+        return items.filter(item => !q || item.name.toLowerCase().includes(q)).slice(0, 10);
+    }, [allUsers, clients, currentUserId]);
 
     const groupChannels = channels.filter(ch => ch.channel_type !== 'dm');
     const dmChannels = channels.filter(ch => ch.channel_type === 'dm');
@@ -344,7 +311,7 @@ export default function MessagesPage() {
                                                                 </div>
                                                             )}
                                                             <div className="text-sm text-gray-800 whitespace-pre-wrap"
-                                                                dangerouslySetInnerHTML={{ __html: renderMessage(msg.body) }} />
+                                                                dangerouslySetInnerHTML={{ __html: renderMentions(msg.body) }} />
                                                         </div>
                                                     </div>
                                                 );
@@ -355,43 +322,25 @@ export default function MessagesPage() {
                                 </div>
 
                                 {/* Compose */}
-                                <div className="px-5 py-3 border-t relative">
-                                    {showMentions && mentionSuggestions.length > 0 && (
-                                        <div className="absolute bottom-full left-5 right-5 mb-1 bg-white border rounded-xl shadow-lg max-h-64 overflow-y-auto z-10">
-                                            <div className="p-2 border-b">
-                                                <p className="text-xs text-gray-500 font-medium flex items-center gap-1"><AtSign className="w-3 h-3" /> Mention a user or participant</p>
-                                            </div>
-                                            {mentionSuggestions.map(item => (
-                                                <button key={`${item.type}-${item.id}`} onClick={() => insertMention(item)}
-                                                    className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-gray-50 text-sm">
-                                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0 ${item.type === 'user' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                                                        {item.name[0]}
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="font-medium text-gray-900 truncate">{item.name}</p>
-                                                        <p className="text-xs text-gray-400">{item.type === 'user' ? 'Team member' : 'Participant'} • {item.subtitle}</p>
-                                                    </div>
-                                                    <span className={`text-xs px-1.5 py-0.5 rounded ${item.type === 'user' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
-                                                        {item.type}
-                                                    </span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-
+                                <div className="px-5 py-3 border-t">
                                     <div className="flex gap-2 items-end">
-                                        <textarea ref={inputRef} value={newMessage}
-                                            onChange={e => handleInputChange(e.target.value)}
-                                            onKeyDown={handleKeyDown}
-                                            placeholder="Type a message... (@ to mention someone)"
-                                            className="flex-1 p-3 border rounded-xl text-sm resize-none min-h-[44px] max-h-32"
-                                            rows={1} />
+                                        <div className="flex-1">
+                                            <MentionTextarea
+                                                value={newMessage}
+                                                onChange={setNewMessage}
+                                                onKeyDown={handleKeyDown}
+                                                getSuggestions={getMessageSuggestions}
+                                                placeholder="Type a message... (@ to mention someone)"
+                                                rows={1}
+                                                className="w-full p-3 border rounded-xl text-sm resize-none min-h-[44px] max-h-32"
+                                                helperText="Enter to send, Shift+Enter for new line. @ to mention users or participants."
+                                            />
+                                        </div>
                                         <button onClick={sendMessage} disabled={sending || !newMessage.trim()}
                                             className="p-3 bg-ddor-blue text-white rounded-xl hover:bg-[#156090] disabled:opacity-40 flex-shrink-0">
                                             {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                                         </button>
                                     </div>
-                                    <p className="text-xs text-gray-400 mt-1">Enter to send, Shift+Enter for new line. @ to mention users or participants.</p>
                                 </div>
                             </>
                         ) : (

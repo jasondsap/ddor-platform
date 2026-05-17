@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, getUserId } from '@/lib/auth';
 import { query } from '@/lib/db';
+import { canUserAccessClient } from '@/lib/access';
 
 // GET /api/notifications — unread counts + recent mentions
 export async function GET(req: NextRequest) {
@@ -25,18 +26,53 @@ export async function GET(req: NextRequest) {
             AND (ch.channel_type != 'dm' OR ch.dm_user_1 = $1::uuid OR ch.dm_user_2 = $1::uuid)
         `, [userId]);
 
-        // 2. Recent messages that @mention this user (search mentions JSONB)
+        // 2. Recent @mentions of this user — UNION over messages + notes.
+        //    Both sources use the same body-embedded `@[Name](type:id)` syntax,
+        //    persisted as JSONB on the source row. Dashboard surfaces both
+        //    via source_type so the click-handler can deep-link correctly.
+        //
+        //    Note: this preserves the existing JSONB-LIKE pattern for now.
+        //    A proper notifications table is a Phase 2 upgrade
+        //    (see MENTIONS_FINDINGS.md, Strategy A).
         const mentions = await query(`
-            SELECT m.id, m.body, m.created_at, m.channel_id,
-                u.first_name || ' ' || u.last_name AS sender_name,
-                ch.name AS channel_name, ch.channel_type
-            FROM messages m
-            JOIN users u ON m.sender_id = u.id
-            JOIN channels ch ON m.channel_id = ch.id
-            WHERE m.is_deleted = false
-            AND m.sender_id != $1::uuid
-            AND m.mentions::text LIKE '%' || $1 || '%'
-            ORDER BY m.created_at DESC
+            (
+                SELECT 'message'::text AS source_type,
+                    m.id AS source_id,
+                    m.body,
+                    m.created_at,
+                    m.channel_id AS context_id,
+                    NULL::uuid AS client_id,
+                    NULL::text AS client_name,
+                    u.first_name || ' ' || u.last_name AS sender_name,
+                    ch.name AS channel_name,
+                    ch.channel_type AS channel_type
+                FROM messages m
+                JOIN users u ON m.sender_id = u.id
+                JOIN channels ch ON m.channel_id = ch.id
+                WHERE m.is_deleted = false
+                  AND m.sender_id != $1::uuid
+                  AND m.mentions::text LIKE '%' || $1 || '%'
+            )
+            UNION ALL
+            (
+                SELECT 'note'::text AS source_type,
+                    n.id AS source_id,
+                    n.content AS body,
+                    n.created_at,
+                    n.client_id AS context_id,
+                    n.client_id,
+                    c.first_name || ' ' || c.last_name AS client_name,
+                    u.first_name || ' ' || u.last_name AS sender_name,
+                    NULL::text AS channel_name,
+                    NULL::text AS channel_type
+                FROM client_notes n
+                JOIN users u ON n.author_id = u.id
+                LEFT JOIN clients c ON n.client_id = c.id
+                WHERE n.is_archived = false
+                  AND n.author_id != $1::uuid
+                  AND n.mentions::text LIKE '%' || $1 || '%'
+            )
+            ORDER BY created_at DESC
             LIMIT 10
         `, [userId]);
 
@@ -80,9 +116,21 @@ export async function GET(req: NextRequest) {
             LIMIT 5
         `, [userId]);
 
+        // Annotate each note mention with whether the recipient currently has
+        // access to its client (defense-in-depth — see MENTIONS_FINDINGS.md).
+        // Message mentions are channel-scoped and don't carry client context.
+        const mentionsWithAccess = await Promise.all(
+            (mentions as any[]).map(async (m) => {
+                if (m.source_type === 'note' && m.client_id) {
+                    return { ...m, can_access_client: await canUserAccessClient(userId, m.client_id) };
+                }
+                return { ...m, can_access_client: true };
+            })
+        );
+
         return NextResponse.json({
             totalUnread: parseInt((unreadResult[0] as any)?.total_unread) || 0,
-            mentions,
+            mentions: mentionsWithAccess,
             recentDMs,
             recentChannel,
         });

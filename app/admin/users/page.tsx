@@ -28,6 +28,7 @@ export default function AdminUsersPage() {
 
     const [users, setUsers] = useState<any[]>([]);
     const [facilities, setFacilities] = useState<any[]>([]);
+    const [counties, setCounties] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [roleFilter, setRoleFilter] = useState('');
@@ -37,7 +38,7 @@ export default function AdminUsersPage() {
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
 
-    const [newUser, setNewUser] = useState({ first_name: '', last_name: '', email: '', role: 'healthcare_user', facility_id: '' });
+    const [newUser, setNewUser] = useState<any>({ first_name: '', last_name: '', email: '', role: 'healthcare_user', facility_id: '', county_ids: [] as string[] });
     const [editForm, setEditForm] = useState<any>({});
 
     useEffect(() => { if (authStatus === 'unauthenticated') router.push('/auth/signin'); }, [authStatus, router]);
@@ -46,6 +47,7 @@ export default function AdminUsersPage() {
         if (!ddor) return;
         fetchUsers();
         fetch('/api/facilities?include_inactive=true').then(r => r.json()).then(d => setFacilities(d.facilities || []));
+        fetch('/api/counties').then(r => r.json()).then(d => setCounties(d.counties || []));
     }, [ddor]);
 
     const fetchUsers = async () => {
@@ -60,14 +62,21 @@ export default function AdminUsersPage() {
         const res = await fetch('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newUser) });
         const data = await res.json();
         if (!res.ok) { setError(data.error || 'Failed'); setSaving(false); return; }
-        setShowCreate(false); setNewUser({ first_name: '', last_name: '', email: '', role: 'healthcare_user', facility_id: '' });
+        setShowCreate(false); setNewUser({ first_name: '', last_name: '', email: '', role: 'healthcare_user', facility_id: '', county_ids: [] });
         setSaving(false); setSuccessMsg('User created'); setTimeout(() => setSuccessMsg(''), 3000);
         fetchUsers();
     };
 
     const startEdit = (user: any) => {
         setEditingId(user.id);
-        setEditForm({ first_name: user.first_name, last_name: user.last_name, email: user.email, role: user.role || 'healthcare_user', facility_id: user.facility_id || '' });
+        setEditForm({
+            first_name: user.first_name,
+            last_name: user.last_name,
+            email: user.email,
+            role: user.role || 'healthcare_user',
+            facility_id: user.facility_id || '',
+            county_ids: (user.counties || []).map((c: any) => c.id),
+        });
     };
 
     const handleUpdate = async () => {
@@ -118,33 +127,55 @@ export default function AdminUsersPage() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
                             <div>
                                 <label className="block text-xs font-medium text-gray-600 mb-1">First Name *</label>
-                                <input value={newUser.first_name} onChange={e => setNewUser(p => ({ ...p, first_name: e.target.value }))}
+                                <input value={newUser.first_name} onChange={e => setNewUser((p: any) => ({ ...p, first_name: e.target.value }))}
                                     className="w-full p-2.5 border rounded-lg text-sm" placeholder="Erin" />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-gray-600 mb-1">Last Name *</label>
-                                <input value={newUser.last_name} onChange={e => setNewUser(p => ({ ...p, last_name: e.target.value }))}
+                                <input value={newUser.last_name} onChange={e => setNewUser((p: any) => ({ ...p, last_name: e.target.value }))}
                                     className="w-full p-2.5 border rounded-lg text-sm" placeholder="Henle" />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-gray-600 mb-1">Email *</label>
-                                <input value={newUser.email} onChange={e => setNewUser(p => ({ ...p, email: e.target.value }))} type="email"
+                                <input value={newUser.email} onChange={e => setNewUser((p: any) => ({ ...p, email: e.target.value }))} type="email"
                                     className="w-full p-2.5 border rounded-lg text-sm" placeholder="ehenle@fletchergroup.org" />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-gray-600 mb-1">Role</label>
-                                <select value={newUser.role} onChange={e => setNewUser(p => ({ ...p, role: e.target.value }))}
-                                    className="w-full p-2.5 border rounded-lg text-sm">
+                                <select
+                                    value={newUser.role}
+                                    onChange={e => setNewUser((p: any) => ({
+                                        ...p,
+                                        role: e.target.value,
+                                        // Clear the other field's value when switching role to avoid sending stale data.
+                                        facility_id: e.target.value === 'navigator' ? '' : p.facility_id,
+                                        county_ids: e.target.value === 'navigator' ? p.county_ids : [],
+                                    }))}
+                                    className="w-full p-2.5 border rounded-lg text-sm"
+                                >
                                     {ROLES.map(r => <option key={r.value} value={r.value}>{r.label} — {r.desc}</option>)}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Assigned Facility</label>
-                                <select value={newUser.facility_id} onChange={e => setNewUser(p => ({ ...p, facility_id: e.target.value }))}
-                                    className="w-full p-2.5 border rounded-lg text-sm">
-                                    <option value="">None (all facilities)</option>
-                                    {facilities.map((f: any) => <option key={f.id} value={f.id}>{f.provider_name ? `${f.provider_name} — ` : ''}{f.name}</option>)}
-                                </select>
+                                {newUser.role === 'navigator' ? (
+                                    <>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Assigned Counties (up to 3)</label>
+                                        <CountyMultiSelect
+                                            allCounties={counties}
+                                            selected={newUser.county_ids || []}
+                                            onChange={(ids) => setNewUser((p: any) => ({ ...p, county_ids: ids }))}
+                                        />
+                                    </>
+                                ) : (
+                                    <>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Assigned Facility</label>
+                                        <select value={newUser.facility_id} onChange={e => setNewUser((p: any) => ({ ...p, facility_id: e.target.value }))}
+                                            className="w-full p-2.5 border rounded-lg text-sm">
+                                            <option value="">None (all facilities)</option>
+                                            {facilities.map((f: any) => <option key={f.id} value={f.id}>{f.provider_name ? `${f.provider_name} — ` : ''}{f.name}</option>)}
+                                        </select>
+                                    </>
+                                )}
                             </div>
                         </div>
                         <div className="flex gap-2">
@@ -185,7 +216,7 @@ export default function AdminUsersPage() {
                                     <tr className="bg-gray-50 border-b">
                                         <th className="text-left px-4 py-3 font-medium text-gray-600">User</th>
                                         <th className="text-left px-4 py-3 font-medium text-gray-600">Role</th>
-                                        <th className="text-left px-4 py-3 font-medium text-gray-600">Facility</th>
+                                        <th className="text-left px-4 py-3 font-medium text-gray-600">Facility / Counties</th>
                                         <th className="text-left px-4 py-3 font-medium text-gray-600">Cognito</th>
                                         <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
                                     </tr>
@@ -214,8 +245,16 @@ export default function AdminUsersPage() {
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     {isEditing ? (
-                                                        <select value={editForm.role} onChange={e => setEditForm((p: any) => ({ ...p, role: e.target.value }))}
-                                                            className="p-1.5 border rounded text-xs w-full">
+                                                        <select
+                                                            value={editForm.role}
+                                                            onChange={e => setEditForm((p: any) => ({
+                                                                ...p,
+                                                                role: e.target.value,
+                                                                facility_id: e.target.value === 'navigator' ? '' : p.facility_id,
+                                                                county_ids: e.target.value === 'navigator' ? p.county_ids : [],
+                                                            }))}
+                                                            className="p-1.5 border rounded text-xs w-full"
+                                                        >
                                                             {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                                                         </select>
                                                     ) : (
@@ -224,11 +263,31 @@ export default function AdminUsersPage() {
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     {isEditing ? (
-                                                        <select value={editForm.facility_id || ''} onChange={e => setEditForm((p: any) => ({ ...p, facility_id: e.target.value }))}
-                                                            className="p-1.5 border rounded text-xs w-full">
-                                                            <option value="">None</option>
-                                                            {facilities.map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                                        </select>
+                                                        editForm.role === 'navigator' ? (
+                                                            <CountyMultiSelect
+                                                                allCounties={counties}
+                                                                selected={editForm.county_ids || []}
+                                                                onChange={(ids) => setEditForm((p: any) => ({ ...p, county_ids: ids }))}
+                                                            />
+                                                        ) : (
+                                                            <select value={editForm.facility_id || ''} onChange={e => setEditForm((p: any) => ({ ...p, facility_id: e.target.value }))}
+                                                                className="p-1.5 border rounded text-xs w-full">
+                                                                <option value="">None</option>
+                                                                {facilities.map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                                            </select>
+                                                        )
+                                                    ) : user.role === 'navigator' ? (
+                                                        (user.counties || []).length > 0 ? (
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {user.counties.map((c: any) => (
+                                                                    <span key={c.id} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 text-[10px] rounded-full font-medium">
+                                                                        {c.name}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-xs text-amber-600">No counties assigned</span>
+                                                        )
                                                     ) : (
                                                         <span className="text-xs text-gray-600">{user.facility_name || '—'}</span>
                                                     )}
@@ -283,6 +342,68 @@ export default function AdminUsersPage() {
                     </div>
                 </div>
             </main>
+        </div>
+    );
+}
+
+const MAX_NAVIGATOR_COUNTIES = 3;
+
+function CountyMultiSelect({
+    allCounties,
+    selected,
+    onChange,
+    max = MAX_NAVIGATOR_COUNTIES,
+}: {
+    allCounties: { id: string; name: string }[];
+    selected: string[];
+    onChange: (ids: string[]) => void;
+    max?: number;
+}) {
+    const selectedSet = new Set(selected);
+    const remaining = allCounties.filter(c => !selectedSet.has(c.id));
+    const atMax = selected.length >= max;
+
+    return (
+        <div>
+            <div className="flex flex-wrap gap-1.5 mb-2 min-h-[24px]">
+                {selected.length === 0 ? (
+                    <span className="text-xs text-gray-400 italic py-0.5">No counties assigned yet</span>
+                ) : (
+                    selected.map(id => {
+                        const c = allCounties.find(x => x.id === id);
+                        return (
+                            <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full font-medium">
+                                {c?.name || id}
+                                <button
+                                    type="button"
+                                    onClick={() => onChange(selected.filter(x => x !== id))}
+                                    className="hover:bg-blue-100 rounded-full p-0.5"
+                                    aria-label={`Remove ${c?.name || 'county'}`}
+                                >
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </span>
+                        );
+                    })
+                )}
+            </div>
+            <select
+                value=""
+                disabled={atMax || allCounties.length === 0}
+                onChange={(e) => {
+                    if (!e.target.value) return;
+                    onChange([...selected, e.target.value]);
+                }}
+                className="w-full p-2 border rounded-lg text-sm disabled:bg-gray-50 disabled:text-gray-400"
+            >
+                <option value="">
+                    {atMax ? `Maximum ${max} counties selected` : 'Add county…'}
+                </option>
+                {remaining.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+            </select>
+            <p className="text-[10px] text-gray-400 mt-1">{selected.length} / {max} selected</p>
         </div>
     );
 }

@@ -54,6 +54,10 @@ export async function POST(req: NextRequest) {
 
         if (!body.content?.trim()) return NextResponse.json({ error: 'Content is required' }, { status: 400 });
 
+        // Persist mentions JSON the same way messages do: stringified array on
+        // the row. The dashboard mention feed picks it up via /api/notifications.
+        const mentions = Array.isArray(body.mentions) ? body.mentions : [];
+
         const note = await insert('client_notes', {
             title: body.title?.trim() || null,
             content: body.content.trim(),
@@ -65,6 +69,7 @@ export async function POST(req: NextRequest) {
             author_id: getUserId(session),
             note_date: body.note_date || new Date().toISOString().split('T')[0],
             is_pinned: body.is_pinned || false,
+            mentions: JSON.stringify(mentions),
         });
 
         return NextResponse.json({ success: true, note });

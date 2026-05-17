@@ -23,6 +23,106 @@ const ARCHIVE_REASONS = [
     'Other',
 ];
 
+// ============================================================================
+// Formatters
+// ============================================================================
+// TODO: when these are needed elsewhere, lift to '@/lib/format.ts' and import.
+
+/**
+ * Format a US phone number as the user types: (606)-123-1234
+ *
+ * - Strips non-digits
+ * - Caps at 10 digits (US NANP without country code)
+ * - Progressive: shows partial formatting while typing
+ *
+ *   ""           -> ""
+ *   "6"          -> "(6"
+ *   "606"        -> "(606"
+ *   "6063"       -> "(606)-3"
+ *   "606356"     -> "(606)-356"
+ *   "6063566779" -> "(606)-356-6779"
+ */
+function formatPhoneNumber(value: string): string {
+    const digits = value.replace(/\D/g, '').slice(0, 10);
+    if (digits.length === 0) return '';
+    if (digits.length <= 3) return `(${digits}`;
+    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+// ============================================================================
+// Reusable input components (defined at module scope so React preserves
+// component identity across renders — defining these inside the page
+// component caused the inputs to remount on every keystroke and lose focus)
+// ============================================================================
+
+type FormShape = Record<string, any>;
+type UpdateFn = (field: string, value: any) => void;
+
+interface InpProps {
+    label: string;
+    field: string;
+    type?: string;
+    required?: boolean;
+    span?: 1 | 2 | 3;
+    /** Optional formatter run on every keystroke (e.g. phone number) */
+    formatter?: (value: string) => string;
+    form: FormShape;
+    u: UpdateFn;
+}
+
+function Inp({ label, field, type = 'text', required = false, span = 1, formatter, form, u }: InpProps) {
+    const spanClass = span === 2 ? 'sm:col-span-2' : span === 3 ? 'sm:col-span-3' : '';
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const next = formatter ? formatter(e.target.value) : e.target.value;
+        u(field, next);
+    };
+    return (
+        <div className={spanClass}>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+                {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+            </label>
+            <input
+                type={type}
+                value={form[field] || ''}
+                onChange={handleChange}
+                className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-ddor-blue/20 focus:border-ddor-blue"
+            />
+        </div>
+    );
+}
+
+interface SelProps {
+    label: string;
+    field: string;
+    options: { value: string; label: string }[];
+    required?: boolean;
+    form: FormShape;
+    u: UpdateFn;
+}
+
+function Sel({ label, field, options, required = false, form, u }: SelProps) {
+    return (
+        <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+                {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+            </label>
+            <select
+                value={form[field] || ''}
+                onChange={e => u(field, e.target.value)}
+                className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-ddor-blue/20 focus:border-ddor-blue"
+            >
+                <option value="">— Select —</option>
+                {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+        </div>
+    );
+}
+
+// ============================================================================
+// Page
+// ============================================================================
+
 export default function EditClientPage() {
     const router = useRouter();
     const params = useParams();
@@ -78,7 +178,9 @@ export default function EditClientPage() {
                     first_name: c.first_name || '',
                     last_name: c.last_name || '',
                     email: c.email || '',
-                    phone: c.phone || '',
+                    // Format the stored phone number for display (handles legacy
+                    // values stored as "6063566779", "606-356-6779", etc.)
+                    phone: formatPhoneNumber(c.phone || ''),
                     date_of_birth: c.date_of_birth?.split('T')[0] || '',
                     zip: c.zip || '',
                     gender: c.gender || '',
@@ -151,25 +253,6 @@ export default function EditClientPage() {
         return <div className="min-h-screen bg-gray-50"><Header /><div className="max-w-2xl mx-auto px-6 py-24 text-center"><CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" /><h2 className="text-2xl font-bold text-ddor-navy mb-2">Client Updated</h2><p className="text-gray-400 text-sm">Redirecting...</p></div></div>;
     }
 
-    const Inp = ({ label, field, type = 'text', required = false, span = 1 }: { label: string; field: string; type?: string; required?: boolean; span?: number }) => (
-        <div className={span === 2 ? 'sm:col-span-2' : span === 3 ? 'sm:col-span-3' : ''}>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{label}{required && <span className="text-red-500 ml-0.5">*</span>}</label>
-            <input type={type} value={(form as any)[field] || ''} onChange={e => u(field, e.target.value)}
-                className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-ddor-blue/20 focus:border-ddor-blue" />
-        </div>
-    );
-
-    const Sel = ({ label, field, options, required = false }: { label: string; field: string; options: { value: string; label: string }[]; required?: boolean }) => (
-        <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{label}{required && <span className="text-red-500 ml-0.5">*</span>}</label>
-            <select value={(form as any)[field] || ''} onChange={e => u(field, e.target.value)}
-                className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-ddor-blue/20 focus:border-ddor-blue">
-                <option value="">— Select —</option>
-                {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-        </div>
-    );
-
     return (
         <div className="min-h-screen bg-gray-50">
             <Header />
@@ -189,12 +272,12 @@ export default function EditClientPage() {
                     <div className="bg-white rounded-xl shadow-sm p-6">
                         <h2 className="font-semibold text-ddor-navy flex items-center gap-2 mb-4"><User className="w-5 h-5 text-ddor-blue" /> Identity</h2>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <Inp label="First Name" field="first_name" required />
-                            <Inp label="Last Name" field="last_name" required />
-                            <Inp label="DDOR ID" field="ddor_id" />
-                            <Inp label="Date of Birth" field="date_of_birth" type="date" required />
-                            <Sel label="Gender" field="gender" options={GENDER_OPTIONS.map(g => ({ value: g, label: g }))} />
-                            <Inp label="Zip Code" field="zip" />
+                            <Inp label="First Name" field="first_name" required form={form} u={u} />
+                            <Inp label="Last Name" field="last_name" required form={form} u={u} />
+                            <Inp label="DDOR ID" field="ddor_id" form={form} u={u} />
+                            <Inp label="Date of Birth" field="date_of_birth" type="date" required form={form} u={u} />
+                            <Sel label="Gender" field="gender" options={GENDER_OPTIONS.map(g => ({ value: g, label: g }))} form={form} u={u} />
+                            <Inp label="Zip Code" field="zip" form={form} u={u} />
                         </div>
                     </div>
 
@@ -202,9 +285,9 @@ export default function EditClientPage() {
                     <div className="bg-white rounded-xl shadow-sm p-6">
                         <h2 className="font-semibold text-ddor-navy flex items-center gap-2 mb-4"><Phone className="w-5 h-5 text-ddor-blue" /> Contact</h2>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <Inp label="Phone" field="phone" type="tel" />
-                            <Inp label="Email" field="email" type="email" />
-                            <Inp label="Alternate Contact" field="alternate_contact" />
+                            <Inp label="Phone" field="phone" type="tel" formatter={formatPhoneNumber} form={form} u={u} />
+                            <Inp label="Email" field="email" type="email" form={form} u={u} />
+                            <Inp label="Alternate Contact" field="alternate_contact" form={form} u={u} />
                         </div>
                     </div>
 
@@ -212,9 +295,9 @@ export default function EditClientPage() {
                     <div className="bg-white rounded-xl shadow-sm p-6">
                         <h2 className="font-semibold text-ddor-navy flex items-center gap-2 mb-4"><Stethoscope className="w-5 h-5 text-ddor-blue" /> Clinical</h2>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <Sel label="Diagnosis" field="diagnosis" options={DIAGNOSIS_OPTIONS.map(d => ({ value: d, label: d === 'co_occurring' ? 'Co-Occurring' : d.toUpperCase() }))} />
-                            <Inp label="Secondary Diagnosis" field="secondary_diagnosis" />
-                            <Sel label="Eligibility" field="eligibility_status" options={ELIGIBILITY_OPTIONS.map(e => ({ value: e, label: e }))} />
+                            <Sel label="Diagnosis" field="diagnosis" options={DIAGNOSIS_OPTIONS.map(d => ({ value: d, label: d === 'co_occurring' ? 'Co-Occurring' : d.toUpperCase() }))} form={form} u={u} />
+                            <Inp label="Secondary Diagnosis" field="secondary_diagnosis" form={form} u={u} />
+                            <Sel label="Eligibility" field="eligibility_status" options={ELIGIBILITY_OPTIONS.map(e => ({ value: e, label: e }))} form={form} u={u} />
                             <label className="flex items-center gap-2 sm:col-span-3 p-3 bg-blue-50 rounded-lg cursor-pointer">
                                 <input type="checkbox" checked={form.has_oud} onChange={e => u('has_oud', e.target.checked)} className="w-4 h-4 rounded" />
                                 <span className="text-sm text-blue-800">Has Opioid Use Disorder (OUD)</span>
@@ -234,9 +317,9 @@ export default function EditClientPage() {
                                     {facilities.map((f: any) => <option key={f.id} value={f.id}>{f.provider_name ? `${f.provider_name} — ` : ''}{f.name}</option>)}
                                 </select>
                             </div>
-                            <Inp label="Treatment Start Date" field="treatment_start_date" type="date" />
-                            <Inp label="Agreement Signed Date" field="agreement_signed_date" type="date" />
-                            <Inp label="Agreement Length (Days)" field="agreement_length_days" type="number" />
+                            <Inp label="Treatment Start Date" field="treatment_start_date" type="date" form={form} u={u} />
+                            <Inp label="Agreement Signed Date" field="agreement_signed_date" type="date" form={form} u={u} />
+                            <Inp label="Agreement Length (Days)" field="agreement_length_days" type="number" form={form} u={u} />
                         </div>
                     </div>
 

@@ -22,6 +22,7 @@ export default function ClientsPage() {
     const [showArchived, setShowArchived] = useState(false);
     const [providerFilter, setProviderFilter] = useState('');
     const [facilityFilter, setFacilityFilter] = useState('');
+    const [countyFilter, setCountyFilter] = useState('');
 
     useEffect(() => {
         if (authStatus === 'unauthenticated') router.push('/auth/signin');
@@ -56,9 +57,15 @@ export default function ClientsPage() {
         return names;
     }, [clients, providerFilter]);
 
+    const counties = useMemo(() => {
+        const names = Array.from(new Set(clients.map(c => c.originating_county_name).filter(Boolean))).sort();
+        return names;
+    }, [clients]);
+
     const filtered = clients.filter(c => {
         if (providerFilter && c.provider_name !== providerFilter) return false;
         if (facilityFilter && c.facility_name !== facilityFilter) return false;
+        if (countyFilter && c.originating_county_name !== countyFilter) return false;
         if (!search) return true;
         const q = search.toLowerCase();
         return (
@@ -66,7 +73,8 @@ export default function ClientsPage() {
             c.last_name?.toLowerCase().includes(q) ||
             c.ddor_id?.toLowerCase().includes(q) ||
             c.provider_name?.toLowerCase().includes(q) ||
-            c.facility_name?.toLowerCase().includes(q)
+            c.facility_name?.toLowerCase().includes(q) ||
+            c.originating_county_name?.toLowerCase().includes(q)
         );
     });
 
@@ -92,7 +100,7 @@ export default function ClientsPage() {
         return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-ddor-blue" /></div>;
     }
 
-    const hasFilters = providerFilter || facilityFilter;
+    const hasFilters = providerFilter || facilityFilter || countyFilter;
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -101,7 +109,7 @@ export default function ClientsPage() {
                 {/* Page header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                     <div>
-                        <h1 className="text-2xl font-bold text-ddor-navy">Referred Clients</h1>
+                        <h1 className="text-2xl font-bold text-ddor-navy">Clients</h1>
                         <p className="text-sm text-gray-500 mt-1">
                             {filtered.length} {showArchived ? 'total' : 'active'} participant{filtered.length !== 1 ? 's' : ''}
                             {hasFilters && ` (filtered)`}
@@ -164,8 +172,17 @@ export default function ClientsPage() {
                             {facilities.map(f => <option key={f} value={f}>{f}</option>)}
                         </select>
 
+                        <select
+                            value={countyFilter}
+                            onChange={(e) => setCountyFilter(e.target.value)}
+                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white min-w-[200px]"
+                        >
+                            <option value="">All Originating Counties</option>
+                            {counties.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+
                         {hasFilters && (
-                            <button onClick={() => { setProviderFilter(''); setFacilityFilter(''); }}
+                            <button onClick={() => { setProviderFilter(''); setFacilityFilter(''); setCountyFilter(''); }}
                                 className="px-3 py-2 text-sm text-ddor-blue hover:underline flex items-center gap-1">
                                 <X className="w-3 h-3" /> Clear filters
                             </button>

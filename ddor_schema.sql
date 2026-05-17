@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict fvuKYOzMNTnm7u8HZGUjpuc6rdfNNTYENi6wb2cQdFzETO5VRd2OqXIEFQ5XGBX
+\restrict 2xCYes39KpruHbDJJKu5A2d3z3fuhatjDyl1flHVPqeO8dhHZNYihzcajXlfm6Z
 
 -- Dumped from database version 17.8 (9c8634e)
 -- Dumped by pg_dump version 17.6
@@ -904,7 +904,8 @@ CREATE TABLE public.client_notes (
     is_pinned boolean DEFAULT false,
     is_archived boolean DEFAULT false,
     created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
+    updated_at timestamp with time zone DEFAULT now(),
+    mentions jsonb DEFAULT '[]'::jsonb
 );
 
 
@@ -3864,5 +3865,5 @@ ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict fvuKYOzMNTnm7u8HZGUjpuc6rdfNNTYENi6wb2cQdFzETO5VRd2OqXIEFQ5XGBX
+\unrestrict 2xCYes39KpruHbDJJKu5A2d3z3fuhatjDyl1flHVPqeO8dhHZNYihzcajXlfm6Z
 

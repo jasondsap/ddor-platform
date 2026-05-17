@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import type { ReportCompletionStatus } from '@/types';
 import { STATUS_COLORS } from '@/types';
+import { stripMentions } from '@/lib/mentions';
 
 interface DashboardData {
     activeClients: number;
@@ -30,6 +31,12 @@ export default function DashboardPage() {
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [notifications, setNotifications] = useState<any>(null);
+    // Mentions the user has clicked through this session. Local-only — there's
+    // no notifications table yet so "read" state isn't persisted.
+    // TODO(notifications-table): persist read state when Strategy A lands.
+    const [acknowledgedMentionIds, setAcknowledgedMentionIds] = useState<Set<string>>(new Set());
+    // Mentions where the click revealed lost access — show inline message in place of the card.
+    const [revokedAccessMentionIds, setRevokedAccessMentionIds] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         if (status === 'unauthenticated') router.push('/auth/signin');
@@ -98,7 +105,7 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
                     <StatCard
                         icon={Users}
-                        label="Active Participants"
+                        label="Active Clients"
                         value={data?.activeClients || 0}
                         color="#2563eb"
                         onClick={() => router.push('/clients')}
@@ -127,9 +134,8 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Quick Actions */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-10">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-10">
                     {[
-                        { label: 'Referred Clients', icon: Users, href: '/clients', color: '#2563eb' },
                         { label: 'Report Tracking', icon: ClipboardList, href: '/report-tracking', color: '#d97706' },
                         { label: 'Submit Report', icon: FileText, href: '/reports/new', color: '#10B981' },
                         { label: 'Initiation', icon: Bell, href: '/initiation/new', color: '#dc2626' },
@@ -251,27 +257,63 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            {/* @Mentions of you */}
-                            {(notifications.mentions || []).length > 0 && (
+                            {/* @Mentions of you — message + note sources */}
+                            {(notifications.mentions || []).filter((m: any) => !acknowledgedMentionIds.has(m.source_id)).length > 0 && (
                                 <div className="bg-white rounded-xl shadow-sm p-5">
                                     <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-3">
                                         <AtSign className="w-4 h-4 text-purple-500" /> You were mentioned
                                     </h3>
                                     <div className="space-y-2.5">
-                                        {(notifications.mentions as any[]).slice(0, 4).map((m: any) => (
-                                            <button key={m.id} onClick={() => router.push(`/messages`)}
-                                                className="w-full text-left p-3 rounded-lg bg-purple-50/50 hover:bg-purple-50 transition-colors">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className="text-xs font-medium text-purple-700">{m.sender_name}</span>
-                                                    <span className="text-xs text-gray-400">in #{m.channel_name}</span>
-                                                    <span className="text-xs text-gray-400 ml-auto">{new Date(m.created_at).toLocaleDateString()}</span>
-                                                </div>
-                                                <p className="text-sm text-gray-700 line-clamp-2">{m.body.replace(/@\[[^\]]+\]\([^)]+\)/g, (match: string) => {
-                                                    const name = match.match(/@\[([^\]]+)\]/)?.[1] || '';
-                                                    return `@${name}`;
-                                                })}</p>
-                                            </button>
-                                        ))}
+                                        {(notifications.mentions as any[])
+                                            .filter(m => !acknowledgedMentionIds.has(m.source_id))
+                                            .slice(0, 4)
+                                            .map((m: any) => {
+                                                const isNote = m.source_type === 'note';
+                                                const revoked = revokedAccessMentionIds.has(m.source_id);
+                                                const handleClick = () => {
+                                                    if (isNote) {
+                                                        if (!m.can_access_client) {
+                                                            setRevokedAccessMentionIds(prev => new Set(prev).add(m.source_id));
+                                                            // Auto-dismiss after a beat so the user reads the message.
+                                                            setTimeout(() => {
+                                                                setAcknowledgedMentionIds(prev => new Set(prev).add(m.source_id));
+                                                            }, 3500);
+                                                            return;
+                                                        }
+                                                        setAcknowledgedMentionIds(prev => new Set(prev).add(m.source_id));
+                                                        router.push(`/clients/${m.client_id}?tab=notes&note=${m.source_id}`);
+                                                        return;
+                                                    }
+                                                    // Message mention — no per-message deep link today
+                                                    setAcknowledgedMentionIds(prev => new Set(prev).add(m.source_id));
+                                                    router.push('/messages');
+                                                };
+                                                if (revoked) {
+                                                    return (
+                                                        <div key={m.source_id} className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm">
+                                                            <p className="text-amber-800 font-medium">You no longer have access to this participant.</p>
+                                                            <p className="text-xs text-amber-700 mt-1">
+                                                                {m.sender_name} mentioned you in a note about {m.client_name || 'a participant'}, but your access has changed.
+                                                            </p>
+                                                        </div>
+                                                    );
+                                                }
+                                                return (
+                                                    <button key={m.source_id} onClick={handleClick}
+                                                        className="w-full text-left p-3 rounded-lg bg-purple-50/50 hover:bg-purple-50 transition-colors">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="text-xs font-medium text-purple-700">{m.sender_name}</span>
+                                                            <span className="text-xs text-gray-400">
+                                                                {isNote
+                                                                    ? `in note${m.client_name ? ` about ${m.client_name}` : ''}`
+                                                                    : `in #${m.channel_name}`}
+                                                            </span>
+                                                            <span className="text-xs text-gray-400 ml-auto">{new Date(m.created_at).toLocaleDateString()}</span>
+                                                        </div>
+                                                        <p className="text-sm text-gray-700 line-clamp-2">{stripMentions(m.body)}</p>
+                                                    </button>
+                                                );
+                                            })}
                                     </div>
                                 </div>
                             )}

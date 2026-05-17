@@ -20,6 +20,8 @@ export async function GET(req: NextRequest) {
                 f.name AS facility_name,
                 p.name AS provider_name,
                 p.abbreviation AS provider_abbreviation,
+                co.id AS originating_county_id,
+                co.name AS originating_county_name,
                 rt.fourteen_day_status,
                 rt.kyae_referral_status,
                 rt.forty_two_day_status,
@@ -33,6 +35,8 @@ export async function GET(req: NextRequest) {
             FROM clients c
             LEFT JOIN facilities f ON c.facility_id = f.id
             LEFT JOIN providers p ON f.provider_id = p.id
+            LEFT JOIN referrals r ON r.client_id = c.id
+            LEFT JOIN counties co ON co.id = r.originating_county_id
             LEFT JOIN report_tracking rt ON rt.client_id = c.id
             WHERE 1=1
         `;

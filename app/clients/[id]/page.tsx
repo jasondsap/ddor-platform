@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Header from '@/components/Header';
 import {
     ArrowLeft, User, Calendar, FileText, Activity,
@@ -14,35 +14,61 @@ import {
 } from 'lucide-react';
 import { REPORT_TYPE_LABELS, STATUS_COLORS } from '@/types';
 import type { ReportCompletionStatus } from '@/types';
+import { ConsentSection, ConsentInfoItem } from '@/components/ConsentSection';
+import { NoteCard } from '@/components/NoteCard';
+import { NoteForm, type NoteFormValues } from '@/components/NoteForm';
+import type { MentionSuggestion } from '@/lib/mentions';
 
-type Section = 'overview' | 'timeline' | 'reports' | 'assessments' | 'referral' | 'notes';
+type Section = 'overview' | 'timeline' | 'reports' | 'assessments' | 'communication' | 'referral' | 'notes';
 
 const SIDEBAR_ITEMS: { key: Section; label: string; icon: any }[] = [
     { key: 'overview', label: 'Overview', icon: User },
     { key: 'timeline', label: 'Report Timeline', icon: ClipboardList },
     { key: 'reports', label: 'Submitted Reports', icon: FileText },
     { key: 'assessments', label: 'Assessments', icon: Activity },
+    { key: 'communication', label: 'Communication', icon: MessageSquare },
     { key: 'referral', label: 'Referral', icon: Shield },
-    { key: 'notes', label: 'Notes', icon: MessageSquare },
+    { key: 'notes', label: 'Notes', icon: Pin },
 ];
 
-export default function ClientDetailPage() {
+function ClientDetailInner() {
     const router = useRouter();
     const params = useParams();
+    const searchParams = useSearchParams();
     const clientId = params.id as string;
     const { data: session, status: authStatus } = useSession();
     const ddor = (session as any)?.ddor;
+
+    // Deep-link params: ?tab=notes&note={noteId}
+    const initialTab = (searchParams.get('tab') as Section) || 'overview';
+    const deepLinkNoteId = searchParams.get('note');
 
     const [client, setClient] = useState<any>(null);
     const [referral, setReferral] = useState<any>(null);
     const [reports, setReports] = useState<any[]>([]);
     const [questionnaires, setQuestionnaires] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [active, setActive] = useState<Section>('overview');
+    const [active, setActive] = useState<Section>(initialTab);
     const [clientNotes, setClientNotes] = useState<any[]>([]);
-    const [newNote, setNewNote] = useState('');
+    const [showNewNote, setShowNewNote] = useState(false);
+    const [noteSavedMsg, setNoteSavedMsg] = useState(false);
+
+    // Highlight a deep-linked note for 2s. Cleared after.
+    const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(null);
+    useEffect(() => {
+        if (deepLinkNoteId && clientNotes.some(n => n.id === deepLinkNoteId)) {
+            setHighlightedNoteId(deepLinkNoteId);
+            const t = setTimeout(() => setHighlightedNoteId(null), 2000);
+            return () => clearTimeout(t);
+        }
+    }, [deepLinkNoteId, clientNotes]);
 
     useEffect(() => { if (authStatus === 'unauthenticated') router.push('/auth/signin'); }, [authStatus, router]);
+
+    const fetchNotes = useCallback(async () => {
+        const d = await fetch(`/api/notes?client_id=${clientId}`).then(r => r.json());
+        setClientNotes(d.notes || []);
+    }, [clientId]);
 
     useEffect(() => {
         if (!clientId || !ddor?.userId) return;
@@ -52,8 +78,55 @@ export default function ClientDetailPage() {
             .then(data => { setClient(data.client); setReferral(data.referral); setReports(data.reports || []); setQuestionnaires(data.questionnaires || []); })
             .catch(console.error)
             .finally(() => setLoading(false));
-        fetch(`/api/notes?client_id=${clientId}`).then(r => r.json()).then(d => setClientNotes(d.notes || []));
-    }, [clientId, ddor?.userId]);
+        fetchNotes();
+    }, [clientId, ddor?.userId, fetchNotes]);
+
+    // Mention suggestions for note content: only users with access to THIS client.
+    const getNoteMentionSuggestions = useCallback(async (query: string): Promise<MentionSuggestion[]> => {
+        try {
+            const res = await fetch(`/api/access/users-for-client?client_id=${clientId}`);
+            const d = await res.json();
+            const users: MentionSuggestion[] = (d.users || []).map((u: any) => ({
+                name: `${u.first_name} ${u.last_name}`,
+                id: u.id,
+                type: 'user' as const,
+                subtitle: u.role?.replace('_', ' ') || '',
+            }));
+            const q = query.toLowerCase();
+            return users.filter(u => !q || u.name.toLowerCase().includes(q)).slice(0, 10);
+        } catch {
+            return [];
+        }
+    }, [clientId]);
+
+    const handleSaveNote = async (values: NoteFormValues) => {
+        const res = await fetch('/api/notes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...values, client_id: clientId }),
+        });
+        if (res.ok) {
+            setShowNewNote(false);
+            setNoteSavedMsg(true);
+            setTimeout(() => setNoteSavedMsg(false), 2500);
+            await fetchNotes();
+        }
+    };
+
+    const handleArchiveNote = async (id: string) => {
+        if (!confirm('Archive this note?')) return;
+        await fetch(`/api/notes/${id}`, { method: 'DELETE' });
+        setClientNotes(prev => prev.filter(n => n.id !== id));
+    };
+
+    const handlePinNote = async (id: string, current: boolean) => {
+        await fetch(`/api/notes/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_pinned: !current }),
+        });
+        setClientNotes(prev => prev.map(n => n.id === id ? { ...n, is_pinned: !current } : n));
+    };
 
     if (authStatus === 'loading' || loading) {
         return <div className="min-h-screen bg-gray-50"><Header /><div className="flex items-center justify-center py-24"><Loader2 className="w-8 h-8 animate-spin text-ddor-blue" /></div></div>;
@@ -123,11 +196,21 @@ export default function ClientDetailPage() {
 
                 {/* Info Bar */}
                 <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
                         <InfoItem icon={Calendar} label="DOB" value={client.date_of_birth ? `${new Date(client.date_of_birth).toLocaleDateString()}${age ? ` (${age}y)` : ''}` : '—'} />
                         <InfoItem icon={Stethoscope} label="Diagnosis" value={client.diagnosis ? client.diagnosis.replace('_', '-').toUpperCase() : '—'} />
                         <InfoItem icon={Calendar} label="Tx Start" value={client.treatment_start_date ? new Date(client.treatment_start_date).toLocaleDateString() : 'Not set'} highlight={!client.treatment_start_date} />
                         <InfoItem icon={Shield} label="Agreement" value={client.agreement_signed_date ? new Date(client.agreement_signed_date).toLocaleDateString() : '—'} />
+                        <ConsentInfoItem
+                            channel="email"
+                            status={client.email_consent_status || 'not_requested'}
+                            onClick={() => setActive('communication')}
+                        />
+                        <ConsentInfoItem
+                            channel="sms"
+                            status={client.sms_consent_status || 'not_requested'}
+                            onClick={() => setActive('communication')}
+                        />
                     </div>
                 </div>
 
@@ -169,33 +252,78 @@ export default function ClientDetailPage() {
                         {active === 'overview' && (
                             <div className="bg-white rounded-xl shadow-sm p-6">
                                 <h2 className="font-semibold text-ddor-navy mb-5">Participant Details</h2>
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-7">
+                                    {/* Personal column */}
                                     <div>
                                         <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Personal</h3>
-                                        <dl className="space-y-2">
-                                            <DetailRow label="First Name" value={client.first_name} />
-                                            <DetailRow label="Last Name" value={client.last_name} />
-                                            <DetailRow label="Date of Birth" value={client.date_of_birth ? new Date(client.date_of_birth).toLocaleDateString() : null} />
-                                            <DetailRow label="Gender" value={client.gender} />
-                                            <DetailRow label="DDOR ID" value={client.ddor_id} />
-                                            <DetailRow label="Diagnosis" value={client.diagnosis?.replace('_', '-').toUpperCase()} />
-                                            <DetailRow label="OUD" value={client.has_oud ? 'Yes' : 'No'} />
-                                            <DetailRow label="ZIP" value={client.zip} />
-                                            <DetailRow label="Originating County" value={referral?.originating_county_name} />
-                                        </dl>
+
+                                        <div className="mb-4">
+                                            <SubgroupHeader icon={User} label="Identity" />
+                                            <div className="grid grid-cols-2 gap-1.5">
+                                                <Tile label="First Name" value={client.first_name} />
+                                                <Tile label="Last Name" value={client.last_name} />
+                                                <Tile label="Date of Birth" value={client.date_of_birth ? new Date(client.date_of_birth).toLocaleDateString() : null} />
+                                                <Tile label="Gender" value={client.gender} />
+                                            </div>
+                                        </div>
+
+                                        <div className="mb-4">
+                                            <SubgroupHeader icon={Phone} label="Contact" />
+                                            <div className="grid grid-cols-2 gap-1.5">
+                                                <Tile label="Phone" value={client.phone} wide />
+                                                <Tile label="Email" value={client.email} wide />
+                                                <Tile label="ZIP" value={client.zip} />
+                                                <Tile label="Originating County" value={referral?.originating_county_name} />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <SubgroupHeader icon={Stethoscope} label="Clinical" />
+                                            <div className="grid grid-cols-2 gap-1.5">
+                                                <Tile label="DDOR ID" value={client.ddor_id} />
+                                                <Tile label="Diagnosis" value={client.diagnosis?.replace('_', '-').toUpperCase()} />
+                                                <Tile label="OUD" value={client.has_oud ? 'Yes' : 'No'} />
+                                            </div>
+                                        </div>
                                     </div>
+
+                                    {/* Program column */}
                                     <div>
                                         <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Program</h3>
-                                        <dl className="space-y-2">
-                                            <DetailRow label="Facility" value={client.facility_name} />
-                                            <DetailRow label="Provider" value={client.provider_name} />
-                                            <DetailRow label="Agreement Signed" value={client.agreement_signed_date ? new Date(client.agreement_signed_date).toLocaleDateString() : null} />
-                                            <DetailRow label="Treatment Start" value={client.treatment_start_date ? new Date(client.treatment_start_date).toLocaleDateString() : null} />
-                                            <DetailRow label="Agreement End" value={client.agreement_end_date ? new Date(client.agreement_end_date).toLocaleDateString() : null} />
-                                            <DetailRow label="Insurance" value={client.insurance_status} />
-                                            <DetailRow label="Eligibility" value={client.eligibility_status} />
-                                            <DetailRow label="Status" value={client.is_archived ? 'Archived' : 'Active'} />
-                                        </dl>
+
+                                        <div className="mb-4">
+                                            <SubgroupHeader icon={Building} label="Assignment" />
+                                            <div className="grid grid-cols-2 gap-1.5">
+                                                <Tile label="Facility" value={client.facility_name} wide />
+                                                <Tile label="Provider" value={client.provider_name} wide />
+                                            </div>
+                                        </div>
+
+                                        <div className="mb-4">
+                                            <SubgroupHeader icon={Calendar} label="Dates" />
+                                            <div className="grid grid-cols-2 gap-1.5">
+                                                <Tile label="Agreement Signed" value={client.agreement_signed_date ? new Date(client.agreement_signed_date).toLocaleDateString() : null} />
+                                                <Tile label="Treatment Start" value={client.treatment_start_date ? new Date(client.treatment_start_date).toLocaleDateString() : null} />
+                                                <Tile label="Agreement End" value={client.agreement_end_date ? new Date(client.agreement_end_date).toLocaleDateString() : null} />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <SubgroupHeader icon={CheckCircle2} label="Status" />
+                                            <div className="grid grid-cols-2 gap-1.5">
+                                                <Tile label="Insurance" value={client.insurance_status} />
+                                                <Tile
+                                                    label="Eligibility"
+                                                    value={client.eligibility_status}
+                                                    valueClassName={client.eligibility_status?.toLowerCase() === 'pending' ? 'text-amber-600' : undefined}
+                                                />
+                                                <Tile
+                                                    label="Status"
+                                                    value={client.is_archived ? 'Archived' : 'Active'}
+                                                    valueClassName={client.is_archived ? 'text-gray-500' : 'text-green-600'}
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                                 {client.notes && (
@@ -348,6 +476,31 @@ export default function ClientDetailPage() {
                                 )}
                             </div>
                         )}
+                        {/* COMMUNICATION */}
+                        {active === 'communication' && (
+                            <ConsentSection
+                                clientId={clientId}
+                                hasEmail={!!client.email}
+                                hasPhone={!!client.phone}
+                                email={client.email ?? null}
+                                phoneNumber={client.phone ?? null}
+                                emailConsentStatus={client.email_consent_status || 'not_requested'}
+                                smsConsentStatus={client.sms_consent_status || 'not_requested'}
+                                emailGrantedAt={client.email_consent_granted_at ?? null}
+                                smsGrantedAt={client.sms_consent_granted_at ?? null}
+                                emailRevokedAt={client.email_consent_revoked_at ?? null}
+                                smsRevokedAt={client.sms_consent_revoked_at ?? null}
+                                onChanged={() => {
+                                    // Re-fetch the client so the info bar chips reflect the new state
+                                    fetch(`/api/clients/${clientId}`)
+                                        .then(r => r.json())
+                                        .then(data => {
+                                            setClient(data.client);
+                                            if (data.referral) setReferral(data.referral);
+                                        });
+                                }}
+                            />
+                        )}
 
                         {/* REFERRAL */}
                         {active === 'referral' && (
@@ -399,72 +552,51 @@ export default function ClientDetailPage() {
                             <div className="bg-white rounded-xl shadow-sm p-6">
                                 <div className="flex items-center justify-between mb-4">
                                     <h2 className="font-semibold text-ddor-navy">Client Notes</h2>
-                                    <button onClick={() => router.push(`/notes?client_id=${clientId}`)}
-                                        className="text-xs text-ddor-blue hover:underline">View All Notes</button>
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={() => router.push(`/notes?client_id=${clientId}`)}
+                                            className="text-xs text-ddor-blue hover:underline">View All Notes</button>
+                                        <button onClick={() => setShowNewNote(s => !s)}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-ddor-blue text-white rounded-lg text-xs font-medium hover:bg-[#156090]">
+                                            <Plus className="w-3.5 h-3.5" /> New Note
+                                        </button>
+                                    </div>
                                 </div>
 
-                                {/* Quick add */}
-                                <div className="flex gap-2 mb-4">
-                                    <textarea value={newNote} onChange={e => setNewNote(e.target.value)}
-                                        placeholder="Add a quick note..."
-                                        className="flex-1 p-3 border rounded-lg text-sm resize-none min-h-[44px]" rows={1} />
-                                    <button onClick={async () => {
-                                        if (!newNote.trim()) return;
-                                        await fetch('/api/notes', {
-                                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ content: newNote, client_id: clientId, note_type: 'General Note' }),
-                                        });
-                                        setNewNote('');
-                                        const d = await fetch(`/api/notes?client_id=${clientId}`).then(r => r.json());
-                                        setClientNotes(d.notes || []);
-                                    }} disabled={!newNote.trim()}
-                                        className="p-3 bg-ddor-blue text-white rounded-lg disabled:opacity-40">
-                                        <Send className="w-4 h-4" />
-                                    </button>
-                                </div>
+                                {noteSavedMsg && (
+                                    <div className="mb-4 p-2.5 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+                                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                                        <p className="text-xs text-green-700">Note saved</p>
+                                    </div>
+                                )}
+
+                                {showNewNote && (
+                                    <NoteForm
+                                        initialClientId={clientId}
+                                        hideParticipantField
+                                        getMentionSuggestions={getNoteMentionSuggestions}
+                                        onSave={handleSaveNote}
+                                        onCancel={() => setShowNewNote(false)}
+                                    />
+                                )}
 
                                 {clientNotes.length === 0 ? (
-                                    <p className="text-gray-400 text-sm text-center py-8">No notes yet for this client.</p>
+                                    <div className="text-center py-10">
+                                        <FileText className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                                        <p className="text-gray-400 text-sm">No notes yet for this client.</p>
+                                        <p className="text-gray-400 text-xs mt-1">Click "New Note" above to add the first one.</p>
+                                    </div>
                                 ) : (
-                                    <div className="space-y-3">
+                                    <div className="space-y-2">
                                         {clientNotes.map(note => (
-                                            <div key={note.id} className={`p-3 rounded-lg border ${note.is_pinned ? 'border-amber-300 bg-amber-50/50' : 'border-gray-100 bg-gray-50'}`}>
-                                                <div className="flex items-start justify-between gap-2">
-                                                    <div className="flex-1 min-w-0">
-                                                        {note.title && <p className="text-sm font-medium text-gray-900 mb-0.5">{note.title}</p>}
-                                                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{note.content}</p>
-                                                        <div className="flex items-center gap-3 mt-2">
-                                                            <span className="text-xs text-gray-400">{new Date(note.created_at).toLocaleDateString()}</span>
-                                                            <span className="text-xs text-gray-400">{note.author_name}</span>
-                                                            {note.note_type && note.note_type !== 'General Note' && (
-                                                                <span className="text-xs px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded">{note.note_type}</span>
-                                                            )}
-                                                        </div>
-                                                        {note.tags && note.tags.length > 0 && note.tags[0] !== '' && (
-                                                            <div className="flex flex-wrap gap-1 mt-1.5">
-                                                                {note.tags.map((tag: string) => (
-                                                                    <span key={tag} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">{tag}</span>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex gap-0.5 flex-shrink-0">
-                                                        <button onClick={async () => {
-                                                            await fetch(`/api/notes/${note.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_pinned: !note.is_pinned }) });
-                                                            setClientNotes(prev => prev.map(n => n.id === note.id ? { ...n, is_pinned: !note.is_pinned } : n));
-                                                        }} className="p-1 hover:bg-gray-200 rounded">
-                                                            <Pin className={`w-3 h-3 ${note.is_pinned ? 'text-amber-500' : 'text-gray-300'}`} />
-                                                        </button>
-                                                        <button onClick={async () => {
-                                                            if (!confirm('Archive this note?')) return;
-                                                            await fetch(`/api/notes/${note.id}`, { method: 'DELETE' });
-                                                            setClientNotes(prev => prev.filter(n => n.id !== note.id));
-                                                        }} className="p-1 hover:bg-red-50 rounded">
-                                                            <Trash2 className="w-3 h-3 text-gray-300" />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            <NoteCard
+                                                key={note.id}
+                                                note={note}
+                                                onPin={handlePinNote}
+                                                onArchive={handleArchiveNote}
+                                                hideClientLink
+                                                highlighted={highlightedNoteId === note.id}
+                                                scrollIntoViewOnMount={highlightedNoteId === note.id}
+                                            />
                                         ))}
                                     </div>
                                 )}
@@ -474,6 +606,14 @@ export default function ClientDetailPage() {
                 </div>
             </main>
         </div>
+    );
+}
+
+export default function ClientDetailPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+            <ClientDetailInner />
+        </Suspense>
     );
 }
 
@@ -510,6 +650,49 @@ function DetailRow({ label, value }: { label: string; value: any }) {
         <div className="flex justify-between py-1.5 border-b border-gray-50 last:border-0">
             <dt className="text-sm text-gray-500">{label}</dt>
             <dd className="text-sm font-medium text-gray-900">{value || '—'}</dd>
+        </div>
+    );
+}
+
+function SubgroupHeader({ icon: Icon, label }: { icon: any; label: string }) {
+    return (
+        <div className="flex items-center gap-1.5 mb-2">
+            <Icon className="w-3.5 h-3.5 text-gray-400" />
+            <h4 className="text-[11px] font-medium uppercase tracking-wider text-gray-500">{label}</h4>
+        </div>
+    );
+}
+
+function Tile({
+    label,
+    value,
+    wide,
+    valueClassName,
+}: {
+    label: string;
+    value: any;
+    wide?: boolean;
+    valueClassName?: string;
+}) {
+    const isEmpty = value === null || value === undefined || value === '';
+    return (
+        <div
+            className={`rounded-lg px-3 py-2 ${wide ? 'col-span-2' : ''} ${
+                isEmpty ? 'border border-dashed border-gray-200' : 'bg-gray-100'
+            }`}
+        >
+            <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400 mb-0.5">
+                {label}
+            </p>
+            <p
+                className={`text-sm ${
+                    isEmpty
+                        ? 'text-gray-300 font-normal'
+                        : `font-medium ${valueClassName || 'text-gray-900'}`
+                }`}
+            >
+                {isEmpty ? '—' : value}
+            </p>
         </div>
     );
 }

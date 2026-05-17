@@ -13,10 +13,19 @@ function getConnection(): ReturnType<typeof neon> {
     return _sql;
 }
 
-// Proxy defers connection until first actual query
+// Proxy defers connection until first actual query.
+// - apply: handles `sql(query, params)` and tagged-template `` sql`...` `` calls
+// - get:   forwards property access (e.g. `sql.transaction([...])`) to the
+//          underlying neon connection. Functions are .bind()-ed so `this`
+//          is correct when called.
 export const sql: ReturnType<typeof neon> = new Proxy(function () {} as any, {
     apply(_target, _thisArg, args) {
         return (getConnection() as any)(...args);
+    },
+    get(_target, prop, _receiver) {
+        const conn = getConnection() as any;
+        const value = conn[prop];
+        return typeof value === 'function' ? value.bind(conn) : value;
     },
 }) as any;
 
