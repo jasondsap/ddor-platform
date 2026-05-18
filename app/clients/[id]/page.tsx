@@ -469,14 +469,18 @@ function ClientDetailInner() {
                                             <div className="w-20 flex-shrink-0"><span className="text-sm font-medium text-gray-900">KYAE</span></div>
                                             <div className="w-28 flex-shrink-0"><span className="text-sm text-gray-500">w/ 14-Day</span></div>
                                             <div className="flex-1"><StatusBadge status={client.kyae_referral_status} remaining={client.fourteen_day_days_remaining} /></div>
+                                            {(client.kyae_referral_status === 'pending' || client.kyae_referral_status === 'overdue') && (
+                                                <button onClick={() => router.push(`/kyae-referral/new?client_id=${clientId}`)}
+                                                    className="text-xs px-3 py-1 bg-ddor-teal text-white rounded-lg hover:bg-[#239aa8]">Refer</button>
+                                            )}
                                         </div>
 
                                         {/* BARC-10 */}
                                         <div className="flex items-center gap-4 py-2.5 px-3 rounded-lg hover:bg-gray-50">
                                             <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_COLORS[client.barc10_status as ReportCompletionStatus] || '#D1D5DB' }} />
                                             <div className="w-20 flex-shrink-0"><span className="text-sm font-medium text-gray-900">BARC-10</span></div>
-                                            <div className="w-28 flex-shrink-0"><span className="text-sm text-gray-500">w/ 42-Day</span></div>
-                                            <div className="flex-1"><StatusBadge status={client.barc10_status} remaining={client.forty_two_day_days_remaining} /></div>
+                                            <div className="w-28 flex-shrink-0"><span className="text-sm text-gray-500">w/ 90-Day</span></div>
+                                            <div className="flex-1"><StatusBadge status={client.barc10_status} remaining={client.ninety_day_days_remaining} /></div>
                                             {(client.barc10_status === 'pending' || client.barc10_status === 'overdue') && (
                                                 <button onClick={() => router.push(`/assessments/barc10?client_id=${clientId}`)}
                                                     className="text-xs px-3 py-1 bg-ddor-teal text-white rounded-lg hover:bg-[#239aa8]">Administer</button>
@@ -487,8 +491,12 @@ function ClientDetailInner() {
                                         <div className="flex items-center gap-4 py-2.5 px-3 rounded-lg hover:bg-gray-50">
                                             <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_COLORS[client.phq9_gad7_status as ReportCompletionStatus] || '#D1D5DB' }} />
                                             <div className="w-20 flex-shrink-0"><span className="text-sm font-medium text-gray-900">PHQ/GAD</span></div>
-                                            <div className="w-28 flex-shrink-0"><span className="text-sm text-gray-500">w/ 42-Day</span></div>
-                                            <div className="flex-1"><StatusBadge status={client.phq9_gad7_status} remaining={client.forty_two_day_days_remaining} /></div>
+                                            <div className="w-28 flex-shrink-0"><span className="text-sm text-gray-500">w/ 90-Day</span></div>
+                                            <div className="flex-1"><StatusBadge status={client.phq9_gad7_status} remaining={client.ninety_day_days_remaining} /></div>
+                                            {(client.phq9_gad7_status === 'pending' || client.phq9_gad7_status === 'overdue') && (
+                                                <button onClick={() => router.push(`/assessments/phq9-gad7?client_id=${clientId}`)}
+                                                    className="text-xs px-3 py-1 bg-ddor-teal text-white rounded-lg hover:bg-[#239aa8]">Administer</button>
+                                            )}
                                         </div>
 
                                         {/* Final */}
