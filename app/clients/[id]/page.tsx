@@ -10,7 +10,8 @@ import {
     CheckCircle2, Archive, Edit, Shield, Stethoscope,
     ClipboardList, ChevronDown, ChevronUp,
     RefreshCw, GraduationCap, Bell, UserCheck,
-    MapPin, Phone, Mail, Building, Home, MessageSquare, Send, Pin, Trash2, Tag
+    MapPin, Phone, Mail, Building, Home, MessageSquare, Send, Pin, Trash2, Tag,
+    Paperclip
 } from 'lucide-react';
 import { REPORT_TYPE_LABELS, STATUS_COLORS } from '@/types';
 import type { ReportCompletionStatus } from '@/types';
@@ -18,8 +19,10 @@ import { ConsentSection, ConsentInfoItem } from '@/components/ConsentSection';
 import { NoteCard } from '@/components/NoteCard';
 import { NoteForm, type NoteFormValues } from '@/components/NoteForm';
 import type { MentionSuggestion } from '@/lib/mentions';
+import { AttachmentList, type Attachment } from '@/components/AttachmentList';
+import { AttachmentUploadForm } from '@/components/AttachmentUploadForm';
 
-type Section = 'overview' | 'timeline' | 'reports' | 'assessments' | 'communication' | 'referral' | 'notes';
+type Section = 'overview' | 'timeline' | 'reports' | 'assessments' | 'communication' | 'referral' | 'attachments' | 'notes';
 
 const SIDEBAR_ITEMS: { key: Section; label: string; icon: any }[] = [
     { key: 'overview', label: 'Overview', icon: User },
@@ -28,6 +31,7 @@ const SIDEBAR_ITEMS: { key: Section; label: string; icon: any }[] = [
     { key: 'assessments', label: 'Assessments', icon: Activity },
     { key: 'communication', label: 'Communication', icon: MessageSquare },
     { key: 'referral', label: 'Referral', icon: Shield },
+    { key: 'attachments', label: 'Attachments', icon: Paperclip },
     { key: 'notes', label: 'Notes', icon: Pin },
 ];
 
@@ -179,6 +183,44 @@ function ClientDetailInner() {
             body: JSON.stringify({ is_pinned: !current }),
         });
         setClientNotes(prev => prev.map(n => n.id === id ? { ...n, is_pinned: !current } : n));
+    };
+
+    // Attachments tab state
+    const [attachments, setAttachments] = useState<Attachment[]>([]);
+    const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+    const [showAttachmentUpload, setShowAttachmentUpload] = useState(false);
+    const [attachmentUploadedMsg, setAttachmentUploadedMsg] = useState(false);
+
+    const fetchAttachments = useCallback(async () => {
+        setAttachmentsLoading(true);
+        try {
+            const r = await fetch(`/api/clients/${clientId}/attachments`);
+            const d = await r.json();
+            setAttachments(d.attachments || []);
+        } finally {
+            setAttachmentsLoading(false);
+        }
+    }, [clientId]);
+
+    // Lazy-load attachments the first time the user opens the tab.
+    useEffect(() => {
+        if (active === 'attachments' && attachments.length === 0 && !attachmentsLoading) {
+            fetchAttachments();
+        }
+    }, [active, attachments.length, attachmentsLoading, fetchAttachments]);
+
+    const handleArchiveAttachment = async (id: string) => {
+        const res = await fetch(`/api/clients/${clientId}/attachments/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            setAttachments(prev => prev.filter(a => a.id !== id));
+        }
+    };
+
+    const handleAttachmentUploaded = async () => {
+        setShowAttachmentUpload(false);
+        setAttachmentUploadedMsg(true);
+        setTimeout(() => setAttachmentUploadedMsg(false), 2500);
+        await fetchAttachments();
     };
 
     if (authStatus === 'loading' || loading) {
@@ -732,6 +774,48 @@ function ClientDetailInner() {
                                             </div>
                                         </div>
                                     </>
+                                )}
+                            </div>
+                        )}
+
+                        {/* ATTACHMENTS */}
+                        {active === 'attachments' && (
+                            <div className="bg-white rounded-xl shadow-sm p-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="font-semibold text-ddor-navy">Attachments</h2>
+                                    <button
+                                        onClick={() => setShowAttachmentUpload(s => !s)}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-ddor-blue text-white rounded-lg text-xs font-medium hover:bg-[#156090]"
+                                    >
+                                        <Plus className="w-3.5 h-3.5" /> Upload
+                                    </button>
+                                </div>
+
+                                {attachmentUploadedMsg && (
+                                    <div className="mb-4 p-2.5 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+                                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                                        <p className="text-xs text-green-700">Uploaded</p>
+                                    </div>
+                                )}
+
+                                {showAttachmentUpload && (
+                                    <AttachmentUploadForm
+                                        clientId={clientId}
+                                        onUploaded={handleAttachmentUploaded}
+                                        onCancel={() => setShowAttachmentUpload(false)}
+                                    />
+                                )}
+
+                                {attachmentsLoading ? (
+                                    <div className="flex justify-center py-10">
+                                        <Loader2 className="w-6 h-6 animate-spin text-ddor-blue" />
+                                    </div>
+                                ) : (
+                                    <AttachmentList
+                                        clientId={clientId}
+                                        attachments={attachments}
+                                        onArchive={handleArchiveAttachment}
+                                    />
                                 )}
                             </div>
                         )}

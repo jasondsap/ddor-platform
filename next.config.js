@@ -25,6 +25,7 @@ const nextConfig = {
     APP_AWS_SECRET_ACCESS_KEY: process.env.APP_AWS_SECRET_ACCESS_KEY,
     APP_AWS_REGION: process.env.APP_AWS_REGION,
     S3_BUCKET: process.env.S3_BUCKET,
+    S3_ATTACHMENTS_BUCKET: process.env.S3_ATTACHMENTS_BUCKET,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     CONSENT_BASE_URL: process.env.CONSENT_BASE_URL,
   },

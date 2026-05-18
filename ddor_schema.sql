@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict yNAxpKZPXWj8nocV1cbN0GfbneuPMd58cNbF5YOtidhZkVFUfjerhcCQglStGci
+\restrict 5rYRY3tXMYH0VBvQiZMGteOgwWEYW1Bd5a8XrUIbbaSUKPfRf8Trfp2frF5rE1S
 
 -- Dumped from database version 17.8 (9c8634e)
 -- Dumped by pg_dump version 17.6
@@ -876,6 +876,28 @@ CREATE TABLE public.checkin_attributes (
     checkin_id uuid NOT NULL,
     attribute_type text NOT NULL,
     value text NOT NULL
+);
+
+
+--
+-- Name: client_attachments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_attachments (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    client_id uuid NOT NULL,
+    category text NOT NULL,
+    description text,
+    file_name text NOT NULL,
+    file_size_bytes bigint NOT NULL,
+    mime_type text NOT NULL,
+    s3_key text NOT NULL,
+    uploaded_by uuid NOT NULL,
+    uploaded_at timestamp with time zone DEFAULT now() NOT NULL,
+    is_archived boolean DEFAULT false NOT NULL,
+    archived_at timestamp with time zone,
+    archived_by uuid,
+    CONSTRAINT client_attachments_category_check CHECK ((category = ANY (ARRAY['legal_agreement'::text, 'consent_release_of_information'::text, 'consent_to_treat'::text, 'consent_email_text'::text, 'referral_to_case_navigator'::text, 'other'::text])))
 );
 
 
@@ -2064,6 +2086,22 @@ ALTER TABLE ONLY public.checkin_attributes
 
 
 --
+-- Name: client_attachments client_attachments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_attachments
+    ADD CONSTRAINT client_attachments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_attachments client_attachments_s3_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_attachments
+    ADD CONSTRAINT client_attachments_s3_key_key UNIQUE (s3_key);
+
+
+--
 -- Name: client_attributes client_attributes_client_id_attribute_type_value_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2596,6 +2634,20 @@ CREATE INDEX idx_channels_last_msg ON public.channels USING btree (last_message_
 --
 
 CREATE INDEX idx_channels_type ON public.channels USING btree (channel_type);
+
+
+--
+-- Name: idx_client_attachments_category; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_client_attachments_category ON public.client_attachments USING btree (client_id, category, uploaded_at DESC);
+
+
+--
+-- Name: idx_client_attachments_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_client_attachments_client ON public.client_attachments USING btree (client_id, is_archived);
 
 
 --
@@ -3315,6 +3367,30 @@ ALTER TABLE ONLY public.checkin_attributes
 
 
 --
+-- Name: client_attachments client_attachments_archived_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_attachments
+    ADD CONSTRAINT client_attachments_archived_by_fkey FOREIGN KEY (archived_by) REFERENCES public.users(id);
+
+
+--
+-- Name: client_attachments client_attachments_client_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_attachments
+    ADD CONSTRAINT client_attachments_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.clients(id) ON DELETE CASCADE;
+
+
+--
+-- Name: client_attachments client_attachments_uploaded_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_attachments
+    ADD CONSTRAINT client_attachments_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.users(id);
+
+
+--
 -- Name: client_attributes client_attributes_client_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3962,5 +4038,5 @@ ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict yNAxpKZPXWj8nocV1cbN0GfbneuPMd58cNbF5YOtidhZkVFUfjerhcCQglStGci
+\unrestrict 5rYRY3tXMYH0VBvQiZMGteOgwWEYW1Bd5a8XrUIbbaSUKPfRf8Trfp2frF5rE1S
 
