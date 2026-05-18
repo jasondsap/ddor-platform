@@ -657,40 +657,81 @@ function ClientDetailInner() {
                                 {!referral ? (
                                     <p className="text-gray-500 text-sm py-12 text-center">No referral linked to this client.</p>
                                 ) : (
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                        <div>
-                                            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Referral Info</h3>
-                                            <dl className="space-y-2">
-                                                <DetailRow label="Referral #" value={referral.referral_number} />
-                                                <DetailRow label="Date Received" value={referral.date_received ? new Date(referral.date_received).toLocaleDateString() : null} />
-                                                <DetailRow label="Screen Date" value={referral.screen_date ? new Date(referral.screen_date).toLocaleDateString() : null} />
-                                                <DetailRow label="Eligibility" value={referral.eligibility?.replace(/_/g, ' ')} />
-                                                <DetailRow label="Status" value={referral.referral_type_status?.replace(/_/g, ' ')} />
-                                                <DetailRow label="Case Navigator" value={referral.navigator_name} />
-                                            </dl>
-                                        </div>
-                                        <div>
-                                            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Assessment</h3>
-                                            <dl className="space-y-2">
-                                                <DetailRow label="LOC Recommendation" value={referral.loc_recommendation} />
-                                                <DetailRow label="Housing" value={referral.initial_housing?.replace(/_/g, ' ')} />
-                                                <DetailRow label="SMI" value={referral.smi_symptoms ? 'Yes' : 'No'} />
-                                                <DetailRow label="TBI/ABI" value={referral.tbi_abi ? 'Yes' : 'No'} />
-                                                <DetailRow label="Prior Participant" value={referral.prior_participant} />
-                                                <DetailRow label="Urgent" value={referral.is_urgent ? 'Yes' : 'No'} />
-                                            </dl>
-                                        </div>
-                                        {referral.notes && (
-                                            <div className="lg:col-span-2">
-                                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Notes</h3>
-                                                <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{referral.notes}</p>
+                                    <>
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-7">
+                                            {/* Referral Info column */}
+                                            <div>
+                                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Referral Info</h3>
+
+                                                <div className="mb-4">
+                                                    <SubgroupHeader icon={ClipboardList} label="Submission" />
+                                                    <div className="grid grid-cols-2 gap-1.5">
+                                                        <Tile label="Referral #" value={referral.referral_number} />
+                                                        <Tile label="Date Received" value={referral.date_received ? new Date(referral.date_received).toLocaleDateString() : null} />
+                                                        <Tile label="Screen Date" value={referral.screen_date ? new Date(referral.screen_date).toLocaleDateString() : null} />
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <SubgroupHeader icon={UserCheck} label="Routing" />
+                                                    <div className="grid grid-cols-2 gap-1.5">
+                                                        <Tile label="Eligibility" value={referral.eligibility?.replace(/_/g, ' ')} />
+                                                        <Tile label="Status" value={referral.referral_type_status?.replace(/_/g, ' ')} wide />
+                                                        <Tile label="Case Navigator" value={referral.navigator_name} wide />
+                                                    </div>
+                                                </div>
                                             </div>
-                                        )}
-                                        <button onClick={() => router.push(`/referrals/${referral.id}`)}
-                                            className="text-sm text-ddor-blue hover:underline flex items-center gap-1">
-                                            View Full Referral <ChevronRight className="w-4 h-4" />
-                                        </button>
-                                    </div>
+
+                                            {/* Assessment column */}
+                                            <div>
+                                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Assessment</h3>
+
+                                                <div className="mb-4">
+                                                    <SubgroupHeader icon={Stethoscope} label="Clinical" />
+                                                    <div className="grid grid-cols-2 gap-1.5">
+                                                        <Tile label="LOC Recommendation" value={referral.loc_recommendation} />
+                                                        <Tile label="Housing" value={referral.initial_housing?.replace(/_/g, ' ')} />
+                                                    </div>
+                                                </div>
+
+                                                <div className="mb-4">
+                                                    <SubgroupHeader icon={Activity} label="Conditions" />
+                                                    <div className="grid grid-cols-2 gap-1.5">
+                                                        <Tile label="SMI" value={referral.smi_symptoms ? 'Yes' : 'No'} />
+                                                        <Tile label="TBI/ABI" value={referral.tbi_abi ? 'Yes' : 'No'} />
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <SubgroupHeader icon={Tag} label="Case Flags" />
+                                                    <div className="grid grid-cols-2 gap-1.5">
+                                                        <Tile label="Prior Participant" value={referral.prior_participant} />
+                                                        <Tile
+                                                            label="Urgent"
+                                                            value={referral.is_urgent ? 'Yes' : 'No'}
+                                                            valueClassName={referral.is_urgent ? 'text-red-600' : undefined}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Footer: notes + view full link */}
+                                        <div className="mt-6 pt-6 border-t">
+                                            {referral.notes && (
+                                                <div className="mb-4">
+                                                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Notes</h3>
+                                                    <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap">{referral.notes}</p>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-end">
+                                                <button onClick={() => router.push(`/referrals/${referral.id}`)}
+                                                    className="text-sm text-ddor-blue hover:underline flex items-center gap-1">
+                                                    View Full Referral <ChevronRight className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </>
                                 )}
                             </div>
                         )}
