@@ -22,14 +22,14 @@ import type { MentionSuggestion } from '@/lib/mentions';
 import { AttachmentList, type Attachment } from '@/components/AttachmentList';
 import { AttachmentUploadForm } from '@/components/AttachmentUploadForm';
 
-type Section = 'overview' | 'timeline' | 'reports' | 'assessments' | 'communication' | 'referral' | 'attachments' | 'notes';
+type Section = 'overview' | 'timeline' | 'reports' | 'assessments' | 'consent' | 'referral' | 'attachments' | 'notes';
 
 const SIDEBAR_ITEMS: { key: Section; label: string; icon: any }[] = [
     { key: 'overview', label: 'Overview', icon: User },
     { key: 'timeline', label: 'Report Timeline', icon: ClipboardList },
     { key: 'reports', label: 'Submitted Reports', icon: FileText },
     { key: 'assessments', label: 'Assessments', icon: Activity },
-    { key: 'communication', label: 'Communication', icon: MessageSquare },
+    { key: 'consent', label: 'Consent', icon: MessageSquare },
     { key: 'referral', label: 'Referral', icon: Shield },
     { key: 'attachments', label: 'Attachments', icon: Paperclip },
     { key: 'notes', label: 'Notes', icon: Pin },
@@ -299,12 +299,12 @@ function ClientDetailInner() {
                         <ConsentInfoItem
                             channel="email"
                             status={client.email_consent_status || 'not_requested'}
-                            onClick={() => setActive('communication')}
+                            onClick={() => setActive('consent')}
                         />
                         <ConsentInfoItem
                             channel="sms"
                             status={client.sms_consent_status || 'not_requested'}
-                            onClick={() => setActive('communication')}
+                            onClick={() => setActive('consent')}
                         />
                     </div>
                 </div>
@@ -540,39 +540,93 @@ function ClientDetailInner() {
 
                         {/* ASSESSMENTS */}
                         {active === 'assessments' && (
-                            <div className="bg-white rounded-xl shadow-sm p-6">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h2 className="font-semibold text-ddor-navy">Questionnaire Submissions</h2>
-                                    <button onClick={() => router.push(`/assessments/barc10?client_id=${clientId}`)}
-                                        className="flex items-center gap-1 text-sm text-ddor-blue hover:underline">
-                                        <Plus className="w-4 h-4" /> New Assessment
-                                    </button>
+                            <div className="space-y-4">
+                                <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-green-500">
+                                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                                        <div className="min-w-0 flex-1">
+                                            <h3 className="font-semibold text-ddor-navy text-sm mb-1">Send Assessment Link</h3>
+                                            <p className="text-xs text-gray-500 mb-3">
+                                                Sends a tokenized link so the participant can complete an assessment on
+                                                their own. Link expires in 7 days.
+                                            </p>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Assessment</label>
+                                            <select
+                                                value={assessmentType}
+                                                onChange={e => setAssessmentType(e.target.value as 'barc_10' | 'phq9_gad7')}
+                                                className="w-full max-w-xs p-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                            >
+                                                <option value="barc_10">BARC-10 (Recovery Capital)</option>
+                                                <option value="phq9_gad7">PHQ-9 + GAD-7 (Depression / Anxiety)</option>
+                                            </select>
+                                        </div>
+                                        <div className="flex gap-2 flex-shrink-0">
+                                            <button
+                                                type="button"
+                                                disabled={!client.email || assessSending !== null}
+                                                onClick={() => sendAssessmentInvite('email')}
+                                                className="px-3 py-2 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-40 flex items-center gap-1"
+                                                title={!client.email ? 'No email address on file' : ''}
+                                            >
+                                                <Mail className="w-3.5 h-3.5" />
+                                                {assessSending === 'email' ? 'Sending…' : 'Send by Email'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={!client.phone || assessSending !== null}
+                                                onClick={() => sendAssessmentInvite('sms')}
+                                                className="px-3 py-2 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-40 flex items-center gap-1"
+                                                title={!client.phone ? 'No phone number on file' : ''}
+                                            >
+                                                <Phone className="w-3.5 h-3.5" />
+                                                {assessSending === 'sms' ? 'Sending…' : 'Send by Text'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {assessMsg && (
+                                        <div className={`mt-3 p-2.5 rounded-lg text-xs ${
+                                            assessMsg.kind === 'success'
+                                                ? 'bg-green-50 border border-green-200 text-green-700'
+                                                : 'bg-red-50 border border-red-200 text-red-700'
+                                        }`}>
+                                            {assessMsg.text}
+                                        </div>
+                                    )}
                                 </div>
-                                {questionnaires.length === 0 ? (
-                                    <p className="text-gray-500 text-sm py-12 text-center">No assessments recorded yet.</p>
-                                ) : (
-                                    <div className="divide-y">
-                                        {questionnaires.map((q: any) => (
-                                            <div key={q.id} className="flex items-center justify-between py-3 px-2">
-                                                <div className="flex items-center gap-3">
-                                                    <Activity className="w-5 h-5 text-ddor-teal" />
-                                                    <div>
-                                                        <p className="text-sm font-medium text-gray-900">{q.questionnaire_name || q.questionnaire_type}</p>
-                                                        <p className="text-xs text-gray-500">{new Date(q.submitted_at).toLocaleDateString()}</p>
+
+                                <div className="bg-white rounded-xl shadow-sm p-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h2 className="font-semibold text-ddor-navy">Questionnaire Submissions</h2>
+                                        <button onClick={() => router.push(`/assessments/barc10?client_id=${clientId}`)}
+                                            className="flex items-center gap-1 text-sm text-ddor-blue hover:underline">
+                                            <Plus className="w-4 h-4" /> New Assessment
+                                        </button>
+                                    </div>
+                                    {questionnaires.length === 0 ? (
+                                        <p className="text-gray-500 text-sm py-12 text-center">No assessments recorded yet.</p>
+                                    ) : (
+                                        <div className="divide-y">
+                                            {questionnaires.map((q: any) => (
+                                                <div key={q.id} className="flex items-center justify-between py-3 px-2">
+                                                    <div className="flex items-center gap-3">
+                                                        <Activity className="w-5 h-5 text-ddor-teal" />
+                                                        <div>
+                                                            <p className="text-sm font-medium text-gray-900">{q.questionnaire_name || q.questionnaire_type}</p>
+                                                            <p className="text-xs text-gray-500">{new Date(q.submitted_at).toLocaleDateString()}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        {q.total_score !== null && <span className="text-sm font-medium text-ddor-blue">{q.total_score}</span>}
+                                                        {q.is_complete ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Clock className="w-4 h-4 text-amber-500" />}
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    {q.total_score !== null && <span className="text-sm font-medium text-ddor-blue">{q.total_score}</span>}
-                                                    {q.is_complete ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Clock className="w-4 h-4 text-amber-500" />}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
-                        {/* COMMUNICATION */}
-                        {active === 'communication' && (
+                        {/* CONSENT */}
+                        {active === 'consent' && (
                             <div className="space-y-4">
                             <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-ddor-blue">
                                 <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -613,57 +667,6 @@ function ClientDetailInner() {
                                             : 'bg-red-50 border border-red-200 text-red-700'
                                     }`}>
                                         {demoInviteMsg.text}
-                                    </div>
-                                )}
-                            </div>
-                            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-green-500">
-                                <div className="flex items-start justify-between gap-4 flex-wrap">
-                                    <div className="min-w-0 flex-1">
-                                        <h3 className="font-semibold text-ddor-navy text-sm mb-1">Send Assessment Link</h3>
-                                        <p className="text-xs text-gray-500 mb-3">
-                                            Sends a tokenized link so the participant can complete an assessment on
-                                            their own. Link expires in 7 days.
-                                        </p>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Assessment</label>
-                                        <select
-                                            value={assessmentType}
-                                            onChange={e => setAssessmentType(e.target.value as 'barc_10' | 'phq9_gad7')}
-                                            className="w-full max-w-xs p-2 border border-gray-300 rounded-lg text-sm bg-white"
-                                        >
-                                            <option value="barc_10">BARC-10 (Recovery Capital)</option>
-                                            <option value="phq9_gad7">PHQ-9 + GAD-7 (Depression / Anxiety)</option>
-                                        </select>
-                                    </div>
-                                    <div className="flex gap-2 flex-shrink-0">
-                                        <button
-                                            type="button"
-                                            disabled={!client.email || assessSending !== null}
-                                            onClick={() => sendAssessmentInvite('email')}
-                                            className="px-3 py-2 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-40 flex items-center gap-1"
-                                            title={!client.email ? 'No email address on file' : ''}
-                                        >
-                                            <Mail className="w-3.5 h-3.5" />
-                                            {assessSending === 'email' ? 'Sending…' : 'Send by Email'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            disabled={!client.phone || assessSending !== null}
-                                            onClick={() => sendAssessmentInvite('sms')}
-                                            className="px-3 py-2 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-40 flex items-center gap-1"
-                                            title={!client.phone ? 'No phone number on file' : ''}
-                                        >
-                                            <Phone className="w-3.5 h-3.5" />
-                                            {assessSending === 'sms' ? 'Sending…' : 'Send by Text'}
-                                        </button>
-                                    </div>
-                                </div>
-                                {assessMsg && (
-                                    <div className={`mt-3 p-2.5 rounded-lg text-xs ${
-                                        assessMsg.kind === 'success'
-                                            ? 'bg-green-50 border border-green-200 text-green-700'
-                                            : 'bg-red-50 border border-red-200 text-red-700'
-                                    }`}>
-                                        {assessMsg.text}
                                     </div>
                                 )}
                             </div>
