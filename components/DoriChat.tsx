@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import {
     Send, X, Sparkles, Loader2, User, Bot,
     Minimize2, Maximize2
@@ -12,7 +13,18 @@ interface Message {
     timestamp: Date;
 }
 
+// DoriChat is mounted globally from app/layout.tsx but should only appear on
+// the staff dashboards listed here. Public participant-facing pages
+// (/consent/[token], /demographic/invite/[token], /assessment/[token]) and
+// internal flow pages would otherwise inherit it, which is both confusing
+// UX and inappropriate for unauthenticated participants.
+//
+// Add new paths to this list to expose DoriChat there. Match is exact —
+// trailing path segments are not included.
+const ALLOWED_PATHS = new Set(['/', '/court']);
+
 export default function DoriChat() {
+    const pathname = usePathname();
     const [isOpen, setIsOpen] = useState(false);
     const [isMinimized, setIsMinimized] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -64,6 +76,12 @@ export default function DoriChat() {
         "How many open referrals do we have?",
         "What's the invoice summary?",
     ];
+
+    // Path gate: don't render anywhere except the allowed staff dashboards.
+    // Placed after all hooks (above) and before any return, per React rules.
+    if (!ALLOWED_PATHS.has(pathname)) {
+        return null;
+    }
 
     // Closed — floating button
     if (!isOpen) {
