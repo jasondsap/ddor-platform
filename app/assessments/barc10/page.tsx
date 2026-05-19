@@ -10,6 +10,7 @@ import {
     TrendingUp, CheckCircle2, Loader2, RotateCcw,
     Volume2, Square, Search, X
 } from 'lucide-react';
+import { SendAssessmentCard } from '@/components/SendAssessmentCard';
 
 const BARC10_QUESTIONS = [
     { id: 1, text: "There are more important things to me in life than using substances.", domain: "human", shortLabel: "Purpose & Meaning" },
@@ -58,6 +59,8 @@ function Barc10Content() {
     const [isLoading, setIsLoading] = useState(false);
     const [clientName, setClientName] = useState('');
     const [clientId, setClientId] = useState(preselectedClientId || '');
+    const [clientEmail, setClientEmail] = useState<string | null>(null);
+    const [clientPhone, setClientPhone] = useState<string | null>(null);
 
     // Fetch client name if preselected
     useEffect(() => {
@@ -67,6 +70,8 @@ function Barc10Content() {
                 .then(data => {
                     if (data.client) {
                         setClientName(`${data.client.first_name} ${data.client.last_name}`);
+                        setClientEmail(data.client.email ?? null);
+                        setClientPhone(data.client.phone ?? null);
                     }
                 })
                 .catch(console.error);
@@ -189,6 +194,15 @@ function Barc10Content() {
                             Begin Assessment <ArrowRight className="w-4 h-4" />
                         </button>
                     </div>
+
+                    {clientId && (
+                        <SendAssessmentCard
+                            clientId={clientId}
+                            questionnaireType="barc_10"
+                            clientEmail={clientEmail}
+                            clientPhone={clientPhone}
+                        />
+                    )}
                 </div>
             )}
 

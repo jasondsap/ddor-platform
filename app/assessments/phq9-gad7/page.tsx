@@ -10,6 +10,7 @@ import {
     CheckCircle2, Loader2, RotateCcw, Shield,
     Heart, Activity
 } from 'lucide-react';
+import { SendAssessmentCard } from '@/components/SendAssessmentCard';
 
 // =============================================
 // PHQ-9 Questions (Depression)
@@ -79,6 +80,8 @@ function Phq9Gad7Content() {
     const [isLoading, setIsLoading] = useState(false);
     const [clientName, setClientName] = useState('');
     const [clientId, setClientId] = useState(preselectedClientId || '');
+    const [clientEmail, setClientEmail] = useState<string | null>(null);
+    const [clientPhone, setClientPhone] = useState<string | null>(null);
     const [showSafetyAlert, setShowSafetyAlert] = useState(false);
 
     useEffect(() => {
@@ -86,7 +89,11 @@ function Phq9Gad7Content() {
             fetch(`/api/clients/${preselectedClientId}`)
                 .then(r => r.json())
                 .then(data => {
-                    if (data.client) setClientName(`${data.client.first_name} ${data.client.last_name}`);
+                    if (data.client) {
+                        setClientName(`${data.client.first_name} ${data.client.last_name}`);
+                        setClientEmail(data.client.email ?? null);
+                        setClientPhone(data.client.phone ?? null);
+                    }
                 })
                 .catch(console.error);
         }
@@ -258,6 +265,15 @@ function Phq9Gad7Content() {
                             Begin Assessment <ArrowRight className="w-4 h-4" />
                         </button>
                     </div>
+
+                    {clientId && (
+                        <SendAssessmentCard
+                            clientId={clientId}
+                            questionnaireType="phq9_gad7"
+                            clientEmail={clientEmail}
+                            clientPhone={clientPhone}
+                        />
+                    )}
                 </div>
             )}
 
