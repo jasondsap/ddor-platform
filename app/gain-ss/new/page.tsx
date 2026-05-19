@@ -167,7 +167,7 @@ function GainSSContent() {
     return (
         <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
             <div className="flex items-center gap-4 mb-6">
-                <button onClick={() => view === 'questions' && currentSection > 0 ? setCurrentSection(currentSection - 1) : router.back()} className="p-2 hover:bg-gray-200 rounded-lg"><ArrowLeft className="w-5 h-5 text-gray-600" /></button>
+                <button onClick={() => view === 'questions' && currentSection > 0 ? setCurrentSection(currentSection - 1) : (selectedClient ? router.push(`/clients/${selectedClient.id}`) : router.back())} className="p-2 hover:bg-gray-200 rounded-lg"><ArrowLeft className="w-5 h-5 text-gray-600" /></button>
                 <div><h1 className="text-2xl font-bold text-ddor-navy">GAIN-SS Screener</h1><p className="text-sm text-gray-500">Global Appraisal of Individual Needs — Short Screener</p></div>
             </div>
 

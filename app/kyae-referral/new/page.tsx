@@ -133,7 +133,7 @@ function KyaeReferralContent() {
     return (
         <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
             <div className="flex items-center gap-4 mb-6">
-                <button onClick={() => router.back()} className="p-2 hover:bg-gray-200 rounded-lg"><ArrowLeft className="w-5 h-5 text-gray-600" /></button>
+                <button onClick={() => selectedClient ? router.push(`/clients/${selectedClient.id}`) : router.back()} className="p-2 hover:bg-gray-200 rounded-lg"><ArrowLeft className="w-5 h-5 text-gray-600" /></button>
                 <div><h1 className="text-2xl font-bold text-ddor-navy">KYAE Referral</h1><p className="text-sm text-gray-500">Refer participant to Kentucky Adult Education & Workforce Development</p></div>
             </div>
 
@@ -226,7 +226,7 @@ function KyaeReferralContent() {
                 </div>
 
                 <div className="flex gap-3 pb-8">
-                    <button onClick={() => router.back()} className="flex-1 py-3 bg-white border border-gray-300 rounded-xl font-medium text-gray-700">Cancel</button>
+                    <button onClick={() => selectedClient ? router.push(`/clients/${selectedClient.id}`) : router.back()} className="flex-1 py-3 bg-white border border-gray-300 rounded-xl font-medium text-gray-700">Cancel</button>
                     <button onClick={handleSubmit} disabled={saving} className="flex-1 py-3 bg-ddor-blue text-white rounded-xl font-semibold disabled:opacity-40 flex items-center justify-center gap-2">
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {saving ? 'Submitting...' : 'Submit KYAE Referral'}
                     </button>
