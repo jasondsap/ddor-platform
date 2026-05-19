@@ -155,6 +155,13 @@ function Barc10Content() {
             {/* ==================== INTRO ==================== */}
             {view === 'intro' && (
                 <div className="space-y-6">
+                    <button
+                        onClick={() => clientId ? router.push(`/clients/${clientId}`) : router.push('/clients')}
+                        className="flex items-center gap-2 text-sm text-gray-600 hover:text-ddor-blue"
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                        {clientName ? `Back to ${clientName}` : 'Back to Clients'}
+                    </button>
                     <div className="bg-white rounded-2xl p-8 shadow-sm">
                         <div className="flex items-start gap-4 mb-6">
                             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-ddor-teal to-ddor-blue flex items-center justify-center shadow-lg">
